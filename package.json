@@ -1,0 +1,9 @@
+{
+  "name": "partner-mode-app",
+  "private": true,
+  "version": "0.1.0",
+  "dependencies": {
+    "web-push": "^3.6.7",
+    "@vercel/kv": "^1.0.1"
+  }
+}
