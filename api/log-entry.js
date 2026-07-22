@@ -1,0 +1,72 @@
+const { kv } = require('@vercel/kv');
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const NOTE_MAX_LENGTH = 280;
+
+// Single shared business instance, no auth — the caller (the owner's own
+// device) always sends its own local calendar date explicitly. We never
+// derive "today" from the server clock here: this function runs in UTC and
+// would file evening entries under the wrong day.
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const { date, customers, sales, note } = req.body || {};
+
+    if (!date || typeof date !== 'string' || !DATE_RE.test(date)) {
+      res.status(400).json({ error: 'Missing or malformed date' });
+      return;
+    }
+
+    if (!Number.isFinite(customers) || customers < 0) {
+      res.status(400).json({ error: 'customers must be a finite number >= 0' });
+      return;
+    }
+
+    if (!Number.isFinite(sales) || sales < 0) {
+      res.status(400).json({ error: 'sales must be a finite number >= 0' });
+      return;
+    }
+
+    let cleanNote = typeof note === 'string' ? note.trim() : '';
+    if (cleanNote.length > NOTE_MAX_LENGTH) {
+      cleanNote = cleanNote.slice(0, NOTE_MAX_LENGTH);
+    }
+
+    const entry = {
+      date,
+      customers,
+      sales,
+      note: cleanNote || null,
+      // Actual write timestamp (not the caller-supplied business `date`) —
+      // safe to source from the server clock here since it's audit metadata,
+      // not used for calendar-day bucketing.
+      loggedAt: new Date().toISOString(),
+    };
+
+    // Upsert: writing the same date again corrects it in place rather than
+    // duplicating it, and re-adding to the sorted set with the same member
+    // just updates its score.
+    //
+    // Sent as a single multi/pipeline so both writes go out together rather
+    // than as two independent round trips; if log-summary.js ever encounters
+    // a zset member with no matching entry (or vice versa) it already
+    // tolerates that by filtering with `if (entries[i])`.
+    const pipeline = kv.multi();
+    pipeline.set(`logentry:${date}`, entry);
+    pipeline.zadd('logdates', { score: Number(date.replace(/-/g, '')), member: date });
+    await pipeline.exec();
+
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    // Unlike the baseline endpoints (subscribe.js, send-push.js), this
+    // handler intentionally wraps its body in try/catch and returns a
+    // generic 500 rather than letting errors propagate to the platform
+    // default — a deliberate, stricter error-handling choice for new
+    // endpoints going forward, not an oversight.
+    res.status(500).json({ error: 'Something went wrong.' });
+  }
+};

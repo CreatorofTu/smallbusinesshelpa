@@ -1,0 +1,5 @@
+[
+  { "id": "employees", "type": "counter", "prompt": "How many employees do you have?", "min": 0, "max": 50, "start": 0 },
+  { "id": "assistantManager", "type": "toggle", "prompt": "Do you have an assistant manager?", "options": ["No", "Yes"] },
+  { "id": "yearsInBusiness", "type": "counter", "prompt": "How long have you been in business?", "unit": "years", "min": 0, "max": 60, "start": 0 }
+]

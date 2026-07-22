@@ -6,7 +6,7 @@
 <title>Partner Mode</title>
 
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#1c1b1a">
+<meta name="theme-color" content="#000000">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -14,41 +14,51 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
 
 <style>
+  @font-face {
+    font-family: 'Inter';
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/Inter-Regular.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/Inter-Bold.woff2') format('woff2');
+  }
+
   :root {
     --bg: #ffffff;
-    --ink: #1c1b1a;
-    --ink-soft: #6b5f56;
-    --accent: #d97328;
-    --line: #e6e0d6;
-    --scrim: rgba(28, 27, 26, .45);
-    --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --ink: #000000;
+    --ink-soft: #666666;
+    --line: #e0e0e0;
+    --scrim: rgba(0, 0, 0, .45);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #17140f;
-      --ink: #f1ece3;
-      --ink-soft: #b6a99b;
-      --accent: #e8925a;
-      --line: #322d25;
-      --scrim: rgba(0, 0, 0, .6);
+      --bg: #000000;
+      --ink: #ffffff;
+      --ink-soft: #a3a3a3;
+      --line: #2e2e2e;
+      --scrim: rgba(0, 0, 0, .7);
     }
   }
   :root[data-theme="dark"] {
-    --bg: #17140f;
-    --ink: #f1ece3;
-    --ink-soft: #b6a99b;
-    --accent: #e8925a;
-    --line: #322d25;
-    --scrim: rgba(0, 0, 0, .6);
+    --bg: #000000;
+    --ink: #ffffff;
+    --ink-soft: #a3a3a3;
+    --line: #2e2e2e;
+    --scrim: rgba(0, 0, 0, .7);
   }
   :root[data-theme="light"] {
     --bg: #ffffff;
-    --ink: #1c1b1a;
-    --ink-soft: #6b5f56;
-    --accent: #d97328;
-    --line: #e6e0d6;
-    --scrim: rgba(28, 27, 26, .45);
+    --ink: #000000;
+    --ink-soft: #666666;
+    --line: #e0e0e0;
+    --scrim: rgba(0, 0, 0, .45);
   }
 
   * { box-sizing: border-box; }
@@ -56,7 +66,7 @@
   body {
     background: var(--bg);
     color: var(--ink);
-    font-family: var(--font-body);
+    font-family: var(--font);
     min-height: 100vh;
     display: flex;
     justify-content: center;
@@ -76,11 +86,13 @@
   }
   .wordmark img { width: 32px; height: 32px; border-radius: 7px; }
   .wordmark span {
-    font-family: var(--font-display);
+    font-family: var(--font);
+    font-weight: 700;
     font-size: 1.15rem;
   }
   h1 {
-    font-family: var(--font-display);
+    font-family: var(--font);
+    font-weight: 700;
     font-size: 1.6rem;
     line-height: 1.25;
     margin: 0;
@@ -108,7 +120,8 @@
   .card-row svg { flex: none; width: 20px; height: 20px; color: var(--ink-soft); }
 
   button {
-    font-family: var(--font-body);
+    font-family: var(--font);
+    font-weight: 700;
     font-size: 1rem;
     padding: .65rem 1.1rem;
     border-radius: 9px;
@@ -119,16 +132,78 @@
     align-self: flex-start;
   }
   button:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--ink);
     outline-offset: 2px;
   }
-  button:hover { border-color: var(--ink-soft); }
+  button:hover { border-color: var(--ink); }
 
   .status {
     font-size: .9rem;
     color: var(--ink-soft);
     min-height: 1.2em;
   }
+
+  form { display: flex; flex-direction: column; gap: .85rem; }
+  label { display: flex; flex-direction: column; gap: .35rem; font-size: .85rem; color: var(--ink-soft); }
+  input {
+    font-size: 16px;
+    padding: .55em .65em;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    width: 100%;
+  }
+  input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .field-row { display: flex; gap: .75rem; }
+  .field-row label { flex: 1; }
+
+  .summary-block { border-top: 1px solid var(--line); padding-top: .9rem; }
+  .summary-label {
+    font-size: .85rem; color: var(--ink-soft); margin: 0 0 .35rem;
+  }
+  .directive-text {
+    font-family: var(--font); font-weight: 700; font-size: 1.02rem; line-height: 1.5;
+    color: var(--ink); margin: 0;
+  }
+
+  .tertiary-link {
+    background: none; border: none; color: var(--ink-soft); text-decoration: underline;
+    font-family: var(--font); font-size: .85rem; cursor: pointer; padding: .3em 0;
+    align-self: flex-start;
+  }
+  .tertiary-link:hover { color: var(--ink); }
+  .tertiary-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+
+  .ob-progress { font-size: .8rem; color: var(--ink-soft); }
+  .ob-prompt { font-family: var(--font); font-weight: 700; font-size: 1.3rem; line-height: 1.3; margin: 0; }
+
+  .ob-counter { display: flex; flex-direction: column; align-items: center; gap: .6rem; padding: 1.25rem 0; }
+  .ob-count-tap {
+    width: 150px; height: 150px; border-radius: 50%; border: 2px solid var(--ink);
+    background: transparent; color: var(--ink); cursor: pointer;
+    font-family: var(--font); font-weight: 700; font-size: 3rem;
+    font-variant-numeric: tabular-nums;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .ob-count-tap:active { background: var(--ink); color: var(--bg); }
+  .ob-count-tap:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+  .ob-unit { font-size: .85rem; color: var(--ink-soft); }
+  .ob-count-undo {
+    background: none; border: none; color: var(--ink-soft); text-decoration: underline;
+    font-family: var(--font); font-size: .85rem; cursor: pointer; padding: .3em; align-self: center;
+  }
+  .ob-count-undo:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+
+  .ob-toggle { display: flex; gap: .6rem; }
+  .ob-toggle-opt {
+    flex: 1; font-family: var(--font); font-weight: 700; font-size: 1.05rem;
+    padding: .9rem 1rem; border-radius: 10px; border: 1px solid var(--line);
+    background: transparent; color: var(--ink-soft); cursor: pointer; align-self: auto;
+  }
+  .ob-toggle-opt.selected { border-color: var(--ink); color: var(--ink); background: var(--line); }
+  .ob-toggle-opt:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -160,10 +235,39 @@
     <div class="status" id="enable-status"></div>
   </div>
 
-  <div class="card" id="test-card" hidden>
+  <div class="card" id="onboarding-card" hidden>
+    <div class="ob-progress" id="ob-progress"></div>
+    <p class="ob-prompt" id="ob-prompt"></p>
+    <div id="ob-widget"></div>
+    <button type="button" id="ob-continue">Continue</button>
+  </div>
+
+  <div class="card" id="log-card" hidden>
     <strong>You're set</strong>
-    <p class="soft">Alerts are on for this device.</p>
-    <button id="test-btn" type="button">Send me a test push</button>
+    <p class="soft">Log today's numbers, and we'll tell you when something's worth a second look.</p>
+
+    <form id="log-form">
+      <div class="field-row">
+        <label>Customers today
+          <input type="number" id="log-customers" inputmode="numeric" min="0" step="1" required>
+        </label>
+        <label>Sales today ($)
+          <input type="number" id="log-sales" inputmode="decimal" min="0" step="0.01" required>
+        </label>
+      </div>
+      <label>Anything change today? (optional)
+        <input type="text" id="log-note" placeholder="e.g. removed brown sugar, raised prices" maxlength="280">
+      </label>
+      <button type="submit">Log today</button>
+    </form>
+    <div class="status" id="log-status"></div>
+
+    <div class="summary-block" id="summary-block" hidden>
+      <p class="summary-label">This week</p>
+      <p class="directive-text" id="summary-text"></p>
+    </div>
+
+    <button class="tertiary-link" id="test-btn" type="button">Send a test push</button>
     <div class="status" id="test-status"></div>
   </div>
 
@@ -184,7 +288,19 @@
     enableCard: document.getElementById('enable-card'),
     enableBtn: document.getElementById('enable-btn'),
     enableStatus: document.getElementById('enable-status'),
-    testCard: document.getElementById('test-card'),
+    onboardingCard: document.getElementById('onboarding-card'),
+    obProgress: document.getElementById('ob-progress'),
+    obPrompt: document.getElementById('ob-prompt'),
+    obWidget: document.getElementById('ob-widget'),
+    obContinue: document.getElementById('ob-continue'),
+    logCard: document.getElementById('log-card'),
+    logForm: document.getElementById('log-form'),
+    logCustomers: document.getElementById('log-customers'),
+    logSales: document.getElementById('log-sales'),
+    logNote: document.getElementById('log-note'),
+    logStatus: document.getElementById('log-status'),
+    summaryBlock: document.getElementById('summary-block'),
+    summaryText: document.getElementById('summary-text'),
     testBtn: document.getElementById('test-btn'),
     testStatus: document.getElementById('test-status'),
     deniedCard: document.getElementById('denied-card'),
@@ -228,15 +344,181 @@
     return subscription;
   }
 
+  function localDateString(d) {
+    d = d || new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  async function loadSummary() {
+    try {
+      const res = await fetch('/api/log-summary?today=' + localDateString());
+      if (!res.ok) return;
+      const data = await res.json();
+      els.summaryBlock.hidden = false;
+      els.summaryText.textContent = data.directive || data.message || 'Keep logging — a few more days before this means anything.';
+    } catch (err) {
+      // Quiet failure — the log form itself still works without the summary.
+    }
+  }
+
+  const ONBOARDING_KEY = 'partnerModeOnboardingComplete';
+  let obQuestions = null;
+  let obIndex = 0;
+  let obAnswers = {};
+
+  function hasCompletedOnboarding() {
+    try { return localStorage.getItem(ONBOARDING_KEY) === '1'; } catch (err) { return false; }
+  }
+  function markOnboardingComplete() {
+    try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (err) {}
+  }
+
+  function escapeHtmlOb(str) {
+    return String(str).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  function renderCounterWidget(q) {
+    const value = obAnswers[q.id];
+    els.obWidget.innerHTML =
+      '<div class="ob-counter">' +
+        '<button type="button" class="ob-count-tap" id="ob-count-tap">' + value + '</button>' +
+        (q.unit ? '<span class="ob-unit">' + escapeHtmlOb(q.unit) + '</span>' : '') +
+        '<button type="button" class="ob-count-undo" id="ob-count-undo">−1</button>' +
+      '</div>';
+    document.getElementById('ob-count-tap').addEventListener('click', function () {
+      obAnswers[q.id] = Math.min(q.max, obAnswers[q.id] + 1);
+      renderCounterWidget(q);
+    });
+    document.getElementById('ob-count-undo').addEventListener('click', function () {
+      obAnswers[q.id] = Math.max(q.min, obAnswers[q.id] - 1);
+      renderCounterWidget(q);
+    });
+  }
+
+  function renderToggleWidget(q) {
+    const value = obAnswers[q.id];
+    els.obWidget.innerHTML = '<div class="ob-toggle">' +
+      q.options.map(function (opt) {
+        const selected = opt === value;
+        return '<button type="button" class="ob-toggle-opt' + (selected ? ' selected' : '') +
+          '" data-opt="' + escapeHtmlOb(opt) + '">' + escapeHtmlOb(opt) + '</button>';
+      }).join('') +
+    '</div>';
+    const buttons = els.obWidget.querySelectorAll('.ob-toggle-opt');
+    for (let i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener('click', function (e) {
+        obAnswers[q.id] = e.currentTarget.getAttribute('data-opt');
+        renderToggleWidget(q);
+      });
+    }
+  }
+
+  function renderOnboardingStep() {
+    const q = obQuestions[obIndex];
+    els.obProgress.textContent = 'Question ' + (obIndex + 1) + ' of ' + obQuestions.length;
+    els.obPrompt.textContent = q.prompt;
+
+    if (q.type === 'counter') {
+      if (!(q.id in obAnswers)) obAnswers[q.id] = q.start || 0;
+      renderCounterWidget(q);
+    } else if (q.type === 'toggle') {
+      if (!(q.id in obAnswers)) obAnswers[q.id] = q.options[0];
+      renderToggleWidget(q);
+    }
+
+    els.obContinue.textContent = obIndex === obQuestions.length - 1 ? 'Finish' : 'Continue';
+  }
+
+  function startOnboardingIfNeeded() {
+    if (obQuestions) { renderOnboardingStep(); return; }
+    fetch('/onboarding-questions.json')
+      .then(function (res) { return res.json(); })
+      .then(function (questions) {
+        obQuestions = questions;
+        obIndex = 0;
+        obAnswers = {};
+        renderOnboardingStep();
+      })
+      .catch(function () {
+        // If the question set can't load, skip onboarding rather than block the app.
+        markOnboardingComplete();
+        render();
+      });
+  }
+
+  async function handleObContinue() {
+    if (obIndex < obQuestions.length - 1) {
+      obIndex += 1;
+      renderOnboardingStep();
+      return;
+    }
+    els.obContinue.disabled = true;
+    try {
+      await fetch('/api/save-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(obAnswers),
+      });
+    } catch (err) {
+      // Best-effort save — still let the owner into the app either way.
+    }
+    markOnboardingComplete();
+    els.obContinue.disabled = false;
+    render();
+  }
+
   function render() {
     const standalone = isStandalone();
     const permission = ('Notification' in window && 'PushManager' in window) ? Notification.permission : 'unsupported';
+    const granted = standalone && permission === 'granted';
+    const showOnboarding = granted && !hasCompletedOnboarding();
+    const showLog = granted && hasCompletedOnboarding();
 
     els.iosCard.hidden = !(isIOS() && !standalone);
     els.enableCard.hidden = !(standalone && permission === 'default');
     els.deniedCard.hidden = !(standalone && permission === 'denied');
-    els.testCard.hidden = !(standalone && permission === 'granted');
+    els.onboardingCard.hidden = !showOnboarding;
+    els.logCard.hidden = !showLog;
     els.unsupportedCard.hidden = !(standalone && permission === 'unsupported');
+
+    if (showOnboarding) startOnboardingIfNeeded();
+    if (showLog) loadSummary();
+  }
+
+  async function handleLogSubmit(e) {
+    e.preventDefault();
+    const submitBtn = els.logForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    els.logStatus.textContent = 'Saving…';
+    try {
+      const body = {
+        date: localDateString(),
+        customers: Number(els.logCustomers.value),
+        sales: Number(els.logSales.value),
+        note: els.logNote.value.trim(),
+      };
+      const res = await fetch('/api/log-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        els.logStatus.textContent = 'Logged for today.';
+        els.logNote.value = '';
+        loadSummary();
+      } else {
+        els.logStatus.textContent = 'Could not save that — check the numbers and try again.';
+      }
+    } catch (err) {
+      els.logStatus.textContent = 'Something went wrong: ' + err.message;
+    } finally {
+      submitBtn.disabled = false;
+    }
   }
 
   async function handleEnable() {
@@ -281,6 +563,8 @@
     render();
     els.enableBtn.addEventListener('click', handleEnable);
     els.testBtn.addEventListener('click', handleTestPush);
+    els.logForm.addEventListener('submit', handleLogSubmit);
+    els.obContinue.addEventListener('click', handleObContinue);
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
