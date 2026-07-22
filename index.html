@@ -205,6 +205,49 @@
   }
   .ob-toggle-opt.selected { border-color: var(--ink); color: var(--ink); background: var(--line); }
   .ob-toggle-opt:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .ob-products { display: flex; flex-direction: column; gap: 1rem; }
+  .ob-product {
+    border: 1px solid var(--line); border-radius: 10px; padding: .85rem .9rem;
+    display: flex; flex-direction: column; gap: .6rem;
+  }
+  .ob-product-name {
+    font-family: var(--font); font-weight: 700; font-size: 1rem;
+    border: none; border-bottom: 1px solid var(--line); background: transparent;
+    color: var(--ink); padding: .3rem 0; width: 100%;
+  }
+  .ob-product-name:focus-visible { outline: none; border-color: var(--ink); }
+  .ob-variables { display: flex; flex-direction: column; gap: .5rem; }
+  .ob-variable-row { display: flex; gap: .5rem; align-items: center; }
+  .ob-variable-row input {
+    font-size: 14px; padding: .5em .6em; border-radius: 7px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); font-family: var(--font); width: 100%;
+  }
+  .ob-variable-row input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .ob-row-remove {
+    flex: none; background: none; border: none; color: var(--ink-soft); cursor: pointer;
+    font-size: 1.1rem; padding: .2rem .4rem; align-self: auto; line-height: 1;
+  }
+  .ob-row-remove:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+  .ob-add-link, .ob-remove-product {
+    background: none; border: none; color: var(--ink-soft); text-decoration: underline;
+    font-family: var(--font); font-size: .82rem; cursor: pointer; padding: .2rem 0; align-self: flex-start;
+  }
+  .ob-add-link:focus-visible, .ob-remove-product:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .ob-add-product {
+    font-family: var(--font); font-weight: 700; font-size: .95rem;
+    padding: .8rem 1rem; border-radius: 10px; border: 1px dashed var(--line);
+    background: transparent; color: var(--ink-soft); cursor: pointer; align-self: auto;
+  }
+  .ob-add-product:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .ob-env-fields { display: flex; flex-direction: column; gap: .85rem; }
+  .ob-env-fields label { display: flex; flex-direction: column; gap: .35rem; font-size: .85rem; color: var(--ink-soft); }
+  .ob-env-fields input {
+    font-size: 16px; padding: .55em .65em; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); font-family: var(--font); width: 100%;
+  }
+  .ob-env-fields input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 </style>
 </head>
 <body>
@@ -218,7 +261,7 @@
   <div class="hero">
     <p class="hero-eyebrow">small business owners,</p>
     <h1>Your business made you money yesterday. None today.</h1>
-    <p class="hero-sub">Are you okay with your customers not telling you why they disappeared? If not, let us fix it, before they're gone.</p>
+    <p class="hero-sub">Customers won't tell you before they leave forever. So we help you before they leave forever...if you let us.</p>
   </div>
 
   <div class="steps" id="ios-install-card" hidden>
@@ -497,6 +540,105 @@
     }
   }
 
+  function renderProductBuilderWidget(q) {
+    if (!Array.isArray(obAnswers[q.id]) || obAnswers[q.id].length === 0) {
+      obAnswers[q.id] = [{ name: '', variables: [{ name: '', value: '' }] }];
+    }
+    const products = obAnswers[q.id];
+
+    let html = '<div class="ob-products">';
+    products.forEach(function (product, pIdx) {
+      html += '<div class="ob-product">';
+      html += '<input type="text" class="ob-product-name" data-p="' + pIdx + '" placeholder="e.g. Belgian waffles" value="' + escapeHtmlOb(product.name) + '">';
+      html += '<div class="ob-variables">';
+      product.variables.forEach(function (variable, vIdx) {
+        html += '<div class="ob-variable-row">';
+        html += '<input type="text" class="ob-var-name" data-p="' + pIdx + '" data-v="' + vIdx + '" placeholder="e.g. brown sugar" value="' + escapeHtmlOb(variable.name) + '">';
+        html += '<input type="text" class="ob-var-value" data-p="' + pIdx + '" data-v="' + vIdx + '" placeholder="e.g. 2 tbsp" value="' + escapeHtmlOb(variable.value) + '">';
+        if (product.variables.length > 1) {
+          html += '<button type="button" class="ob-row-remove" data-action="remove-variable" data-p="' + pIdx + '" data-v="' + vIdx + '">&times;</button>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+      html += '<button type="button" class="ob-add-link" data-action="add-variable" data-p="' + pIdx + '">+ Add what defines it</button>';
+      if (products.length > 1) {
+        html += '<button type="button" class="ob-remove-product" data-action="remove-product" data-p="' + pIdx + '">Remove this product</button>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<button type="button" class="ob-add-product" data-action="add-product">+ Add another product</button>';
+
+    els.obWidget.innerHTML = html;
+
+    els.obWidget.querySelectorAll('.ob-product-name').forEach(function (input) {
+      input.addEventListener('input', function (e) {
+        products[Number(e.target.getAttribute('data-p'))].name = e.target.value;
+      });
+    });
+    els.obWidget.querySelectorAll('.ob-var-name').forEach(function (input) {
+      input.addEventListener('input', function (e) {
+        products[Number(e.target.getAttribute('data-p'))].variables[Number(e.target.getAttribute('data-v'))].name = e.target.value;
+      });
+    });
+    els.obWidget.querySelectorAll('.ob-var-value').forEach(function (input) {
+      input.addEventListener('input', function (e) {
+        products[Number(e.target.getAttribute('data-p'))].variables[Number(e.target.getAttribute('data-v'))].value = e.target.value;
+      });
+    });
+    els.obWidget.querySelectorAll('[data-action="add-variable"]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        products[Number(e.currentTarget.getAttribute('data-p'))].variables.push({ name: '', value: '' });
+        renderProductBuilderWidget(q);
+      });
+    });
+    els.obWidget.querySelectorAll('[data-action="remove-variable"]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        const p = Number(e.currentTarget.getAttribute('data-p'));
+        products[p].variables.splice(Number(e.currentTarget.getAttribute('data-v')), 1);
+        renderProductBuilderWidget(q);
+      });
+    });
+    els.obWidget.querySelectorAll('[data-action="remove-product"]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        products.splice(Number(e.currentTarget.getAttribute('data-p')), 1);
+        renderProductBuilderWidget(q);
+      });
+    });
+    const addProductBtn = els.obWidget.querySelector('[data-action="add-product"]');
+    if (addProductBtn) {
+      addProductBtn.addEventListener('click', function () {
+        products.push({ name: '', variables: [{ name: '', value: '' }] });
+        renderProductBuilderWidget(q);
+      });
+    }
+  }
+
+  function renderEnvFormWidget(q) {
+    if (!obAnswers[q.id] || typeof obAnswers[q.id] !== 'object') obAnswers[q.id] = {};
+    const values = obAnswers[q.id];
+    let html = '<div class="ob-env-fields">';
+    q.fields.forEach(function (f) {
+      const val = values[f.id] != null ? values[f.id] : '';
+      html += '<label>' + escapeHtmlOb(f.label) +
+        '<input type="' + (f.kind === 'number' ? 'number' : 'text') + '" data-field="' + f.id + '"' +
+        (f.kind === 'number' ? ' inputmode="decimal" min="' + (f.min != null ? f.min : 0) + '" step="' + (f.step || '1') + '"' : '') +
+        ' placeholder="' + escapeHtmlOb(f.placeholder || '') + '" value="' + escapeHtmlOb(val) + '"></label>';
+    });
+    html += '</div>';
+    els.obWidget.innerHTML = html;
+    els.obWidget.querySelectorAll('[data-field]').forEach(function (input) {
+      input.addEventListener('input', function (e) {
+        const fieldId = e.target.getAttribute('data-field');
+        const fieldDef = q.fields.find(function (f) { return f.id === fieldId; });
+        values[fieldId] = fieldDef && fieldDef.kind === 'number'
+          ? (e.target.value === '' ? '' : Number(e.target.value))
+          : e.target.value;
+      });
+    });
+  }
+
   function renderOnboardingStep() {
     const q = obQuestions[obIndex];
     els.obProgress.textContent = 'Question ' + (obIndex + 1) + ' of ' + obQuestions.length;
@@ -508,6 +650,10 @@
     } else if (q.type === 'toggle') {
       if (!(q.id in obAnswers)) obAnswers[q.id] = q.options[0];
       renderToggleWidget(q);
+    } else if (q.type === 'product-builder') {
+      renderProductBuilderWidget(q);
+    } else if (q.type === 'env-form') {
+      renderEnvFormWidget(q);
     }
 
     els.obContinue.textContent = obIndex === obQuestions.length - 1 ? 'Finish' : 'Continue';
@@ -546,9 +692,30 @@
     } catch (err) {
       // Best-effort save — still let the owner into the app either way.
     }
+    try {
+      localStorage.setItem('jaeBusinessType', obAnswers.businessType || '');
+      const firstProduct = Array.isArray(obAnswers.products) && obAnswers.products.length ? obAnswers.products[0].name : '';
+      localStorage.setItem('jaeFirstProduct', firstProduct || '');
+    } catch (err) {}
     markOnboardingComplete();
     els.obContinue.disabled = false;
     render();
+  }
+
+  function applyLogNotePlaceholder() {
+    let businessType = '';
+    let product = '';
+    try {
+      businessType = localStorage.getItem('jaeBusinessType') || '';
+      product = localStorage.getItem('jaeFirstProduct') || '';
+    } catch (err) {}
+    if (businessType === 'Online food sales') {
+      els.logNote.placeholder = 'e.g. changed packaging, switched shipping carrier';
+    } else if (product) {
+      els.logNote.placeholder = 'e.g. changed the ' + product + ' recipe, raised prices';
+    } else {
+      els.logNote.placeholder = 'e.g. removed brown sugar, raised prices';
+    }
   }
 
   function render() {
@@ -567,7 +734,7 @@
     els.unsupportedCard.hidden = !(standalone && permission === 'unsupported');
 
     if (showOnboarding) startOnboardingIfNeeded();
-    if (showLog) loadSummary();
+    if (showLog) { applyLogNotePlaceholder(); loadSummary(); }
   }
 
   async function handleLogSubmit(e) {
