@@ -24,7 +24,7 @@ module.exports = async function handler(req, res) {
   }
 
   const payload = JSON.stringify({
-    title: 'Partner Mode',
+    title: 'Justaddegg',
     body: 'This is a real push, sent from a real server, to this exact device.',
     url: '/',
   });

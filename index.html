@@ -3,30 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Partner Mode</title>
+<title>Justaddegg</title>
 
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#ffffff">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Partner">
+<meta name="apple-mobile-web-app-title" content="Justaddegg">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
 
 <style>
   @font-face {
-    font-family: 'Inter';
-    font-weight: 400;
+    font-family: 'Fustat';
+    font-weight: 200 800;
     font-style: normal;
     font-display: swap;
-    src: url('/fonts/Inter-Regular.woff2') format('woff2');
-  }
-  @font-face {
-    font-family: 'Inter';
-    font-weight: 700;
-    font-style: normal;
-    font-display: swap;
-    src: url('/fonts/Inter-Bold.woff2') format('woff2');
+    src: url('/fonts/Fustat-Variable.ttf') format('truetype-variations');
   }
 
   :root {
@@ -35,7 +28,7 @@
     --ink-soft: #666666;
     --line: #e0e0e0;
     --scrim: rgba(0, 0, 0, .45);
-    --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font: 'Fustat', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
 
   * { box-sizing: border-box; }
@@ -56,21 +49,32 @@
     flex-direction: column;
     gap: 1.5rem;
   }
-  .wordmark {
+  .header-row {
     display: flex;
     align-items: center;
-    gap: .6rem;
+    justify-content: space-between;
   }
-  .wordmark img { width: 32px; height: 32px; border-radius: 7px; }
-  .wordmark span {
+  .wordmark {
     font-family: var(--font);
     font-weight: 700;
-    font-size: 1.15rem;
+    font-size: 1.4rem;
   }
+  .login-link {
+    font-family: var(--font);
+    font-weight: 400;
+    font-size: 1.15rem;
+    color: var(--ink);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    align-self: auto;
+  }
+  .login-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
   h1 {
     font-family: var(--font);
     font-weight: 700;
-    font-size: 1.6rem;
+    font-size: 1.5rem;
     line-height: 1.25;
     margin: 0;
     text-wrap: balance;
@@ -81,6 +85,13 @@
     max-width: 62ch;
   }
   .soft { color: var(--ink-soft); font-size: .95rem; }
+
+  .hero {
+    display: flex; flex-direction: column; align-items: center; gap: .9rem;
+    text-align: center; padding: 7rem 0 .5rem;
+  }
+  .hero-eyebrow { color: var(--ink-soft); font-size: 1.1rem; margin: 0; }
+  .hero-sub { color: var(--ink-soft); font-size: 1.1rem; margin: 0; max-width: 40ch; }
 
   .card {
     border: 1px solid var(--line);
@@ -185,13 +196,17 @@
 </head>
 <body>
 <main>
-  <div class="wordmark">
-    <img src="/icons/icon-192.png" alt="">
-    <span>Partner Mode</span>
+  <div class="header-row">
+    <span class="wordmark">Justaddegg</span>
+    <button type="button" class="login-link" id="login-btn">Login</button>
   </div>
+  <div class="status" id="login-status"></div>
 
-  <h1>We track what changed in your business, and tell you why the numbers moved.</h1>
-  <p class="soft">Install this so the alerts find you — instead of you having to check back.</p>
+  <div class="hero">
+    <p class="hero-eyebrow">small business owners,</p>
+    <h1>Your product changed<br>and gave away your greatness.</h1>
+    <p class="hero-sub">We'll tell you the moment it happens — before it costs you the next customer.</p>
+  </div>
 
   <div class="card" id="ios-install-card" hidden>
     <div class="card-row">
@@ -203,6 +218,20 @@
       <strong>Get real alerts on your phone</strong>
     </div>
     <p>Tap the Share icon, then "Add to Home Screen," so you get real alerts instead of having to check back.</p>
+  </div>
+
+  <div class="card" id="chrome-install-card" hidden>
+    <div class="card-row">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v10"></path>
+        <path d="M7 11l5 5 5-5"></path>
+        <path d="M5 19h14"></path>
+      </svg>
+      <strong>Get real alerts on your phone</strong>
+    </div>
+    <p>Add this app so alerts reach you, instead of you having to check back.</p>
+    <button type="button" id="chrome-install-btn">Add to home screen</button>
+    <div class="status" id="chrome-install-status"></div>
   </div>
 
   <div class="card" id="enable-card" hidden>
@@ -261,7 +290,12 @@
   const VAPID_PUBLIC_KEY = 'BBqNh2Qwr3M7EBAtPIK3zOrWuXIsBbs6zkiILpKlRgHbU1VxjfiUqdvrLs6icuV0mT9bmkj9LdaZ3hcgId2P9nc';
 
   const els = {
+    loginBtn: document.getElementById('login-btn'),
+    loginStatus: document.getElementById('login-status'),
     iosCard: document.getElementById('ios-install-card'),
+    chromeInstallCard: document.getElementById('chrome-install-card'),
+    chromeInstallBtn: document.getElementById('chrome-install-btn'),
+    chromeInstallStatus: document.getElementById('chrome-install-status'),
     enableCard: document.getElementById('enable-card'),
     enableBtn: document.getElementById('enable-btn'),
     enableStatus: document.getElementById('enable-status'),
@@ -293,6 +327,36 @@
 
   function isStandalone() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+
+  let deferredInstallPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    render();
+  });
+
+  window.addEventListener('appinstalled', function () {
+    deferredInstallPrompt = null;
+    render();
+  });
+
+  async function handleChromeInstall() {
+    if (!deferredInstallPrompt) return;
+    els.chromeInstallBtn.disabled = true;
+    deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    if (choice.outcome !== 'accepted') {
+      els.chromeInstallStatus.textContent = 'No problem — you can add it anytime from your browser menu.';
+    }
+    els.chromeInstallBtn.disabled = false;
+    render();
+  }
+
+  function handleLoginClick() {
+    els.loginStatus.textContent = 'Accounts are coming soon — for now, just install the app below.';
   }
 
   function urlBase64ToUint8Array(base64String) {
@@ -457,6 +521,7 @@
     const showLog = granted && hasCompletedOnboarding();
 
     els.iosCard.hidden = !(isIOS() && !standalone);
+    els.chromeInstallCard.hidden = !(!isIOS() && !standalone && !!deferredInstallPrompt);
     els.enableCard.hidden = !(standalone && permission === 'default');
     els.deniedCard.hidden = !(standalone && permission === 'denied');
     els.onboardingCard.hidden = !showOnboarding;
@@ -538,6 +603,8 @@
 
   function mount() {
     render();
+    els.loginBtn.addEventListener('click', handleLoginClick);
+    els.chromeInstallBtn.addEventListener('click', handleChromeInstall);
     els.enableBtn.addEventListener('click', handleEnable);
     els.testBtn.addEventListener('click', handleTestPush);
     els.logForm.addEventListener('submit', handleLogSubmit);
