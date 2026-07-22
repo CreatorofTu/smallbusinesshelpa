@@ -109,17 +109,13 @@
 
   .steps { display: flex; flex-direction: column; gap: 1.25rem; }
   .steps[hidden] { display: none; }
-  .step { display: flex; align-items: center; gap: .75rem; }
-  .step-num {
-    font-family: var(--font); font-weight: 700; font-size: 1.05rem;
-    flex: none; width: 1.4rem; align-self: flex-start;
-  }
-  .step-content {
-    flex: 1; display: flex; flex-direction: column; align-items: center;
+  .step {
+    display: flex; flex-direction: column; align-items: center;
     text-align: center; gap: .4rem;
   }
+  .step-num { font-weight: 700; margin-right: .3rem; }
   .step-icon { flex: none; width: 22px; height: 22px; color: var(--ink-soft); }
-  .step-content p { margin: 0; max-width: 24ch; }
+  .step p { margin: 0; max-width: 24ch; }
 
   .card-row { display: flex; align-items: center; gap: .65rem; }
   .card-row svg { flex: none; width: 20px; height: 20px; color: var(--ink-soft); }
@@ -227,68 +223,50 @@
 
   <div class="steps" id="ios-install-card" hidden>
     <div class="step">
-      <span class="step-num">1.</span>
-      <div class="step-content">
-        <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3v12"></path>
-          <path d="M7 8l5-5 5 5"></path>
-          <rect x="4" y="13" width="16" height="8" rx="2"></rect>
-        </svg>
-        <p>Tap the Share icon</p>
-      </div>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"></path>
+        <path d="M7 8l5-5 5 5"></path>
+        <rect x="4" y="13" width="16" height="8" rx="2"></rect>
+      </svg>
+      <p><span class="step-num">1.</span>Tap the Share icon</p>
     </div>
     <div class="step">
-      <span class="step-num">2.</span>
-      <div class="step-content">
-        <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="4" width="16" height="16" rx="4"></rect>
-          <path d="M12 9v6M9 12h6"></path>
-        </svg>
-        <p>Tap "Add to Home Screen"</p>
-      </div>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="4" width="16" height="16" rx="4"></rect>
+        <path d="M12 9v6M9 12h6"></path>
+      </svg>
+      <p><span class="step-num">2.</span>Tap "Add to Home Screen"</p>
     </div>
     <div class="step">
-      <span class="step-num">3.</span>
-      <div class="step-content">
-        <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 11l8-7 8 7"></path>
-          <path d="M6 10v9h12v-9"></path>
-        </svg>
-        <p>Open Justaddegg from your home screen</p>
-      </div>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11l8-7 8 7"></path>
+        <path d="M6 10v9h12v-9"></path>
+      </svg>
+      <p><span class="step-num">3.</span>Open Justaddegg from your home screen</p>
     </div>
   </div>
 
   <div class="steps" id="chrome-install-card" hidden>
     <div class="step">
-      <span class="step-num">1.</span>
-      <div class="step-content">
-        <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 5v10"></path>
-          <path d="M7 11l5 5 5-5"></path>
-          <path d="M5 19h14"></path>
-        </svg>
-        <p>Tap "Add to home screen" below</p>
-      </div>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v10"></path>
+        <path d="M7 11l5 5 5-5"></path>
+        <path d="M5 19h14"></path>
+      </svg>
+      <p><span class="step-num">1.</span>Tap "Add to home screen" below</p>
     </div>
     <div class="step">
-      <span class="step-num">2.</span>
-      <div class="step-content">
-        <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M5 13l4 4 10-10"></path>
-        </svg>
-        <p>Confirm the prompt</p>
-      </div>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 13l4 4 10-10"></path>
+      </svg>
+      <p><span class="step-num">2.</span>Confirm the prompt</p>
     </div>
     <div class="step">
-      <span class="step-num">3.</span>
-      <div class="step-content">
-        <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 11l8-7 8 7"></path>
-          <path d="M6 10v9h12v-9"></path>
-        </svg>
-        <p>Open Justaddegg from your home screen</p>
-      </div>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11l8-7 8 7"></path>
+        <path d="M6 10v9h12v-9"></path>
+      </svg>
+      <p><span class="step-num">3.</span>Open Justaddegg from your home screen</p>
     </div>
     <button type="button" id="chrome-install-btn">Add to home screen</button>
     <div class="status" id="chrome-install-status"></div>
