@@ -58,6 +58,8 @@
     font-family: var(--font);
     font-weight: 700;
     font-size: 1.4rem;
+    padding: .5rem .75rem;
+    margin-left: -.75rem;
   }
   .login-link {
     font-family: var(--font);
@@ -66,7 +68,8 @@
     color: var(--ink);
     background: none;
     border: none;
-    padding: 0;
+    padding: .5rem .75rem;
+    margin-right: -.75rem;
     cursor: pointer;
     align-self: auto;
   }
@@ -103,6 +106,16 @@
     background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%);
   }
   .card[hidden] { display: none; }
+
+  .steps { display: flex; flex-direction: column; gap: 1rem; }
+  .steps[hidden] { display: none; }
+  .step { display: flex; align-items: center; gap: .65rem; }
+  .step-num {
+    font-family: var(--font); font-weight: 700; font-size: 1.05rem;
+    flex: none; width: 1.4rem;
+  }
+  .step-icon { flex: none; width: 22px; height: 22px; color: var(--ink-soft); }
+  .step p { margin: 0; }
 
   .card-row { display: flex; align-items: center; gap: .65rem; }
   .card-row svg { flex: none; width: 20px; height: 20px; color: var(--ink-soft); }
@@ -208,28 +221,59 @@
     <p class="hero-sub">We'll tell you the moment it happens — before it costs you the next customer.</p>
   </div>
 
-  <div class="card" id="ios-install-card" hidden>
-    <div class="card-row">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <div class="steps" id="ios-install-card" hidden>
+    <div class="step">
+      <span class="step-num">1.</span>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 3v12"></path>
         <path d="M7 8l5-5 5 5"></path>
         <rect x="4" y="13" width="16" height="8" rx="2"></rect>
       </svg>
-      <strong>Get real alerts on your phone</strong>
+      <p>Tap the Share icon</p>
     </div>
-    <p>Tap the Share icon, then "Add to Home Screen," so you get real alerts instead of having to check back.</p>
+    <div class="step">
+      <span class="step-num">2.</span>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="4" width="16" height="16" rx="4"></rect>
+        <path d="M12 9v6M9 12h6"></path>
+      </svg>
+      <p>Tap "Add to Home Screen"</p>
+    </div>
+    <div class="step">
+      <span class="step-num">3.</span>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11l8-7 8 7"></path>
+        <path d="M6 10v9h12v-9"></path>
+      </svg>
+      <p>Open Justaddegg from your home screen</p>
+    </div>
   </div>
 
-  <div class="card" id="chrome-install-card" hidden>
-    <div class="card-row">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <div class="steps" id="chrome-install-card" hidden>
+    <div class="step">
+      <span class="step-num">1.</span>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 5v10"></path>
         <path d="M7 11l5 5 5-5"></path>
         <path d="M5 19h14"></path>
       </svg>
-      <strong>Get real alerts on your phone</strong>
+      <p>Tap "Add to home screen" below</p>
     </div>
-    <p>Add this app so alerts reach you, instead of you having to check back.</p>
+    <div class="step">
+      <span class="step-num">2.</span>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 13l4 4 10-10"></path>
+      </svg>
+      <p>Confirm the prompt</p>
+    </div>
+    <div class="step">
+      <span class="step-num">3.</span>
+      <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11l8-7 8 7"></path>
+        <path d="M6 10v9h12v-9"></path>
+      </svg>
+      <p>Open Justaddegg from your home screen</p>
+    </div>
     <button type="button" id="chrome-install-btn">Add to home screen</button>
     <div class="status" id="chrome-install-status"></div>
   </div>
