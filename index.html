@@ -250,6 +250,20 @@
   .item-question li { font-size: .92rem; line-height: 1.45; }
   .item-question-rationale { font-size: .82rem; color: var(--ink-soft); margin: 0; }
 
+  /* History rows (the History section inside #log-card) — same visual
+     grammar as .item-question above (hairline-separated stacked entries
+     inside an existing block), no new visual system. The toggled elements
+     rely on the global [hidden] !important catch-all at the top of this
+     stylesheet, so none of these rules can reintroduce the
+     display-beats-[hidden] bug that rule already closed. */
+  .history-row { border-top: 1px solid var(--line); padding: .7rem 0 0; margin-top: .7rem; }
+  .history-row:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+  .history-row-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .history-row-head .tertiary-link { align-self: auto; }
+  .history-row-date { font-weight: 700; font-size: .92rem; margin: 0; }
+  .history-row-values { font-size: .9rem; color: var(--ink-soft); margin: .15rem 0 0; }
+  .history-edit-form { margin-top: .6rem; }
+
 </style>
 </head>
 <body>
@@ -329,6 +343,20 @@
     <p class="soft">Log today's numbers, and we'll tell you when something's worth a second look.</p>
 
     <button class="tertiary-link" id="qr-stickers-btn" type="button">Print your QR stickers</button>
+
+    <!-- History — the page has no nav of any kind (deliberately, it's one
+         flat scroll), so this plain link near the top of the log card is
+         the findable entry point. Toggles the section below; rows load on
+         first open only (see loadHistory()). Editing a past day POSTs the
+         exact same request shape handleLogSubmit sends to /api/log-entry,
+         just with the row's own real date — the backend always supported
+         any date; "today only" was purely this file's old UI limit. -->
+    <button class="tertiary-link" id="history-btn" type="button">History</button>
+    <div class="summary-block" id="history-block" hidden>
+      <p class="summary-label">Past days</p>
+      <div class="status" id="history-status"></div>
+      <div id="history-rows"></div>
+    </div>
 
     <form id="log-form">
       <div class="field-row">
@@ -478,6 +506,10 @@
     summaryBlock: document.getElementById('summary-block'),
     summaryText: document.getElementById('summary-text'),
     qrStickersBtn: document.getElementById('qr-stickers-btn'),
+    historyBtn: document.getElementById('history-btn'),
+    historyBlock: document.getElementById('history-block'),
+    historyStatus: document.getElementById('history-status'),
+    historyRows: document.getElementById('history-rows'),
     readBtn: document.getElementById('read-btn'),
     readStatus: document.getElementById('read-status'),
     readBlock: document.getElementById('read-block'),
@@ -1031,14 +1063,17 @@
       els.readBlock.hidden = false;
       els.readText.textContent = data.directive || data.diagnosticOnlyLead || data.message || "Keep logging — nothing here has cleared what's normal for your business yet.";
       // Honest, calm disclosure of the real (universal, today) confound gap
-      // the API's own dataGaps field names — see generate-directive.js's file
-      // header (variableDiffLog + coreProducts[].recipe are never tracked
-      // server-side yet). Never surfaced before this, so a directive read as
-      // flat fact with no caveat. Same plain, non-alarming tone as the rest
-      // of this page — no red styling, just a second quiet line.
+      // the API's own dataGaps field names — see generate-directive.js's
+      // CAUSAL_DATA_GAPS comment. As of 2026-07-23, recipe data IS tracked
+      // (encrypted at rest — founder-directed reversal of the old promise,
+      // see save-profile.js's header), so this copy no longer names
+      // recipes; price is the one gap left, and this line must stay in
+      // sync with CAUSAL_DATA_GAPS whenever that object changes. Same
+      // plain, non-alarming tone as the rest of this page — no red
+      // styling, just a second quiet line.
       if (data.dataGaps) {
         els.readCaveat.hidden = false;
-        els.readCaveat.textContent = "This read is based on what customers told us and your sales numbers — we're not tracking recipe or price changes yet.";
+        els.readCaveat.textContent = "This read is based on what customers told us and your sales numbers — we're not tracking price changes yet.";
       }
     } catch (err) {
       els.readStatus.textContent = isTimeoutError(err)
@@ -1047,6 +1082,191 @@
     } finally {
       els.readBtn.disabled = false;
     }
+  }
+
+  // ---- History: past logged days, editable inline ----
+  // Read path: GET /api/log-history (session-gated, newest first, capped
+  // server-side). Write path: the UNCHANGED POST /api/log-entry — it's a
+  // plain upsert keyed by date with no server-side "must be today" rule, so
+  // editing a past day is just handleLogSubmit's exact request shape with
+  // the row's own date. Rows are built with createElement/textContent (same
+  // as renderGoalItems above), never innerHTML — the note field is the
+  // owner's own free text and must never be interpreted as markup.
+  let historyLoaded = false;
+
+  function handleHistoryToggle() {
+    const opening = els.historyBlock.hidden;
+    els.historyBlock.hidden = !opening;
+    if (opening && !historyLoaded) loadHistory();
+  }
+
+  async function loadHistory() {
+    els.historyStatus.textContent = 'Loading…';
+    try {
+      // AUTHORIZATION NOTE: same as every other account-scoped call on this
+      // page — the server derives the account from the signed session
+      // cookie sent automatically with this same-origin request.
+      const res = await fetchWithTimeout('/api/log-history', { credentials: 'same-origin' });
+      if (res.status === 401) {
+        els.historyStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      if (!res.ok) {
+        els.historyStatus.textContent = "Couldn't load your history right now — try again in a bit.";
+        return;
+      }
+      const data = await res.json();
+      historyLoaded = true;
+      els.historyStatus.textContent = '';
+      renderHistoryRows(Array.isArray(data.entries) ? data.entries : []);
+    } catch (err) {
+      els.historyStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
+    }
+  }
+
+  function historySummaryText(entry) {
+    return entry.customers + ' customers, $' + entry.sales + (entry.note ? ' — ' + entry.note : '');
+  }
+
+  function renderHistoryRows(entries) {
+    els.historyRows.innerHTML = '';
+    if (entries.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'soft';
+      empty.textContent = 'Nothing logged yet — the days you log will show up here.';
+      els.historyRows.appendChild(empty);
+      return;
+    }
+    entries.forEach(function (entry) {
+      els.historyRows.appendChild(buildHistoryRow(entry));
+    });
+  }
+
+  function buildHistoryRow(entry) {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+
+    const head = document.createElement('div');
+    head.className = 'history-row-head';
+    const dateEl = document.createElement('p');
+    dateEl.className = 'history-row-date';
+    dateEl.textContent = entry.date;
+    head.appendChild(dateEl);
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'tertiary-link';
+    editBtn.textContent = 'Edit';
+    head.appendChild(editBtn);
+    row.appendChild(head);
+
+    const values = document.createElement('p');
+    values.className = 'history-row-values';
+    values.textContent = historySummaryText(entry);
+    row.appendChild(values);
+
+    // Inline edit form — the SAME three fields the daily log form above
+    // uses (customers / sales / note), pre-filled with this day's values.
+    function labeled(text, input) {
+      const label = document.createElement('label');
+      label.appendChild(document.createTextNode(text));
+      label.appendChild(input);
+      return label;
+    }
+    const form = document.createElement('form');
+    form.className = 'history-edit-form';
+    form.hidden = true;
+    const fieldRow = document.createElement('div');
+    fieldRow.className = 'field-row';
+    const customersInput = document.createElement('input');
+    customersInput.type = 'number';
+    customersInput.inputMode = 'numeric';
+    customersInput.min = '0';
+    customersInput.step = '1';
+    customersInput.required = true;
+    customersInput.value = entry.customers;
+    const salesInput = document.createElement('input');
+    salesInput.type = 'number';
+    salesInput.inputMode = 'decimal';
+    salesInput.min = '0';
+    salesInput.step = '0.01';
+    salesInput.required = true;
+    salesInput.value = entry.sales;
+    fieldRow.appendChild(labeled('Customers', customersInput));
+    fieldRow.appendChild(labeled('Sales ($)', salesInput));
+    form.appendChild(fieldRow);
+    const noteInput = document.createElement('input');
+    noteInput.type = 'text';
+    noteInput.maxLength = 280;
+    noteInput.value = entry.note || '';
+    form.appendChild(labeled('Anything change that day? (optional)', noteInput));
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'submit';
+    saveBtn.textContent = 'Save';
+    form.appendChild(saveBtn);
+    row.appendChild(form);
+
+    const status = document.createElement('div');
+    status.className = 'status';
+    row.appendChild(status);
+
+    editBtn.addEventListener('click', function () {
+      form.hidden = !form.hidden;
+      editBtn.textContent = form.hidden ? 'Edit' : 'Close';
+      status.textContent = '';
+    });
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      saveBtn.disabled = true;
+      status.textContent = 'Saving…';
+      try {
+        // Same endpoint, same shape, same auth as handleLogSubmit above —
+        // the ONLY difference is the date: this row's own real day, not
+        // today's.
+        const res = await fetchWithTimeout('/api/log-entry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            date: entry.date,
+            customers: Number(customersInput.value),
+            sales: Number(salesInput.value),
+            note: noteInput.value.trim(),
+          }),
+        });
+        if (res.status === 401) {
+          status.textContent = "Your session's expired — log back in to keep logging.";
+          location.href = '/onboarding.html?mode=login';
+          return;
+        }
+        if (!res.ok) {
+          status.textContent = 'Could not save that — check the numbers and try again.';
+          return;
+        }
+        entry.customers = Number(customersInput.value);
+        entry.sales = Number(salesInput.value);
+        entry.note = noteInput.value.trim() || null;
+        values.textContent = historySummaryText(entry);
+        form.hidden = true;
+        editBtn.textContent = 'Edit';
+        status.textContent = 'Saved.';
+        // An edited past day can change the week-over-week comparison shown
+        // above — refresh it so the page never shows a stale summary next
+        // to freshly corrected numbers.
+        loadSummary();
+      } catch (err) {
+        status.textContent = isTimeoutError(err)
+          ? 'Taking longer than expected — try again in a bit.'
+          : 'Something went wrong: ' + err.message;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    return row;
   }
 
   function formatMetric(metric, value) {
@@ -1207,6 +1427,7 @@
     render();
     els.loginBtn.addEventListener('click', handleLoginClick);
     els.qrStickersBtn.addEventListener('click', function () { location.href = '/qr-stickers.html'; });
+    els.historyBtn.addEventListener('click', handleHistoryToggle);
     els.chromeInstallBtn.addEventListener('click', handleChromeInstall);
     els.enableBtn.addEventListener('click', handleEnable);
     els.readBtn.addEventListener('click', handleGetRead);

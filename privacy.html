@@ -9,12 +9,15 @@
   privacy.html — real Privacy Policy, drafted 2026-07-23 against this
   app's actual data flows (grep the real api/*.js files, not invented).
   NOT reviewed by a licensed attorney — see the notice banner. Every claim
-  below is grounded in real, checkable code: what's collected, what's
-  explicitly never collected (recipe data), who sees customer feedback
-  (never the owner, verbatim), and which third parties process data
-  (Vercel/KV, Anthropic, Stripe, web push). If the app's real data
-  practices change, this file goes stale and must be updated in the same
-  pass — it is a factual description of the code, not evergreen boilerplate.
+  below is grounded in real, checkable code: what's collected, how recipe
+  data is handled (collected since 2026-07-23 — a deliberate, founder-
+  directed reversal of the original never-collected promise — but encrypted
+  at rest via api/_recipe-crypto.js, AES-256-GCM, decrypted only momentarily
+  server-side, never shown to any human), who sees customer feedback (never
+  the owner, verbatim), and which third parties process data (Vercel/KV,
+  Anthropic, Stripe, web push). If the app's real data practices change,
+  this file goes stale and must be updated in the same pass — it is a
+  factual description of the code, not evergreen boilerplate.
   ============================================================
 -->
 <style>
@@ -76,12 +79,21 @@
     <tr><td>Daily customer counts, sales figures, and any notes you write</td><td>To compute your business's baseline and generate directives</td></tr>
     <tr><td>Your walk-around item list (e.g. "Radio," "Table 3") and which sticker number is bound to each</td><td>To route QR scans to the right feedback page</td></tr>
     <tr><td>Your business hours, schedule</td><td>To know when the Service is relevant to your business</td></tr>
+    <tr><td>Your recipe (the ingredient list you enter during setup) — stored encrypted, see the section below</td><td>So the AI can notice when a recipe change lines up with a change in your numbers</td></tr>
     <tr><td>Payment confirmation (which plan, when — never your card number, which goes straight to Stripe)</td><td>To keep a record that you've paid</td></tr>
     <tr><td>Push notification subscription, if you opt in</td><td>To send you reminders and alerts you asked for</td></tr>
   </table>
 
-  <h3>What we deliberately never collect</h3>
-  <p>Your recipe (ingredients you enter during setup) is never sent to our servers — it stays only on the device/browser you typed it into. This is a real, enforced choice in how the product is built, not just a policy statement: our servers have no code path that accepts or stores it.</p>
+  <h3>Your recipe — collected, but encrypted so no person can read it</h3>
+  <p>This changed on 2026-07-23, and we're saying so plainly rather than quietly. Earlier versions of this app promised your recipe was never sent to our servers at all. We reversed that, deliberately: the recipe is the single most useful thing your AI can watch — "did a recipe change move your numbers?" is the exact question this product exists to answer — and it couldn't do that without ever seeing the recipe.</p>
+  <p>Here's exactly how it's protected, grounded in the real code, not just a promise:</p>
+  <ul>
+    <li>Your recipe is <strong>encrypted before it is stored</strong> (AES-256-GCM, an authenticated encryption standard). What sits in our database is ciphertext — a raw database read, a leaked backup, or our own admin export shows scrambled bytes, not your ingredients.</li>
+    <li>It is <strong>decrypted only momentarily, in server memory</strong>, for exactly one purpose: generating your own business's directives. The decrypted text is never included in anything our servers send back over the network, never written to a log, and when a recipe change is recorded in your change history, that record is itself encrypted too.</li>
+    <li><strong>No human ever sees your stored recipe in plaintext</strong> — not staff, not anyone at Justaddegg. There is no view, export, or admin tool that displays it decrypted, and the app has no screen that reads it back. (A directive shown to you may name an ingredient you changed — "removing the brown sugar cost you 4 customers" — that's the feature doing its job, and it's only ever shown to you, on your own logged-in account.)</li>
+    <li>It is <strong>never shown to anyone else, never shared, and never sold.</strong> It exists only to power your own account's insights.</li>
+    <li>The encryption key lives only on our servers as configuration — it is never present in the app your browser runs, and it is never stored alongside the encrypted data itself.</li>
+  </ul>
 
   <h2>What we collect from anonymous customers (QR scans)</h2>
   <p>Customers scanning a QR code at a participating business do not create an account and are never asked for their name, email, or any identifying information. We collect:</p>
@@ -99,7 +111,7 @@
   <table>
     <tr><th>Who</th><th>What they see</th></tr>
     <tr><td>Vercel (hosting) and Vercel KV / Upstash (database)</td><td>All account and customer-feedback data, as our infrastructure providers</td></tr>
-    <tr><td>Anthropic (AI provider)</td><td>Business setup info, logged notes, and customer feedback text, in order to generate directives and summaries — never your recipe, never a customer's raw comment shown back to you verbatim from that same processing</td></tr>
+    <tr><td>Anthropic (AI provider)</td><td>Business setup info, logged notes, customer feedback text, and — solely while generating your own directives — your recipe's ingredient list (decrypted for that processing only, per the recipe section above); never a customer's raw comment shown back to you verbatim from that same processing</td></tr>
     <tr><td>Stripe (payments)</td><td>Your payment/card details directly — we never receive or store your card number</td></tr>
     <tr><td>Web push services (browser/OS push infrastructure)</td><td>Only what's needed to deliver a notification you opted into, if you enabled that</td></tr>
   </table>

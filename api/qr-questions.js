@@ -21,9 +21,13 @@ const { kv } = require('@vercel/kv');
 // routing key, not a credential: this endpoint has no write path, and the
 // only thing it reads back and returns is (a) this app's OWN previously
 // AI-generated question text, cached under a key it wrote itself, and (b)
-// the business's own coreProduct label (already a non-sensitive field —
-// recipe data is excluded from profile:<accountId> by design, see
-// save-profile.js). Nothing customer-submitted or otherwise sensitive is
+// the business's own coreProduct label (already a non-sensitive field.
+// Note, updated 2026-07-23: recipe data now DOES live in
+// profile:<accountId> — a deliberate founder-directed reversal, see
+// save-profile.js's header — but it's stored encrypted at rest
+// (api/_recipe-crypto.js) and this endpoint never reads or returns
+// profile.product.recipe in any form, so nothing changed about what's
+// reachable here). Nothing customer-submitted or otherwise sensitive is
 // ever readable through this endpoint. Compare submit-review.js, which DOES
 // accept public writes and is where the real per-business scoping/abuse
 // surface actually lives.

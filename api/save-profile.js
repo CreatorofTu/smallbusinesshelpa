@@ -1,5 +1,6 @@
 const { kv } = require('@vercel/kv');
 const { getSessionFromRequest } = require('./_session');
+const { encryptRecipeText, decryptRecipeText } = require('./_recipe-crypto');
 
 // Account-scoped onboarding profile store. Key: profile:<accountId>.
 //
@@ -12,12 +13,27 @@ const { getSessionFromRequest } = require('./_session');
 // stale pre-pivot schema — businessType/products[]/environment — that nothing
 // ever read back). It now matches onboarding.html's real, live schema:
 // setup (businessName/ownerName/address/coreProduct), inventory (item list),
-// bindings (sticker -> item), product (type/temp/toppings/extras — the
-// recipe field is EXCLUDED on purpose, matching onboarding.html's own
-// on-screen promise that the recipe "stays between you and the ai, NEVER US"
-// — never add it to this endpoint's accepted fields), schedule (7-day
-// hours), and payments (append-only $20 onboarding-charge confirmation log —
-// see sanitizePayment below).
+// bindings (sticker -> item), product (type/temp/toppings/extras, plus
+// recipe — see the REVERSAL note below), schedule (7-day hours), and
+// payments (append-only $20 onboarding-charge confirmation log — see
+// sanitizePayment below).
+//
+// RECIPE REVERSAL (2026-07-23) — this endpoint used to EXCLUDE the recipe
+// field on purpose, matching onboarding.html's own on-screen promise that
+// the recipe "stays between you and the ai, NEVER US"; a hard "never add it
+// to this endpoint's accepted fields" rule stood here. The founder reversed
+// that deliberately, in his own words: "then switch it, its their ai
+// manager if its needed to work some lines need to be crossed but
+// acknowledge and protected and showed proof of protection." The old
+// exclusion was the only reason the flagship recipe-level directive
+// ("removing the brown sugar cost you 4 customers") could never fire on
+// real data. The reversal ships with real protection, not a quiet flip:
+// recipe text is encrypted at rest via api/_recipe-crypto.js (AES-256-GCM,
+// key server-side only in RECIPE_ENCRYPTION_KEY) before it ever touches KV,
+// its changelog entries store an ENCRYPTED line-diff (never plaintext
+// before/after — see the recipe-diff block in the handler), and
+// onboarding.html/privacy.html's copy was rewritten in the same pass so the
+// promise shown to owners matches what the code actually does.
 //
 // Consolidates what used to be six separate not-yet-built endpoint stubs
 // (onboarding-setup / -payment / -inventory / -sticker / -schedule
@@ -31,6 +47,12 @@ const STRING_CAP = 200;
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const INVENTORY_MAX_ITEMS = 200; // sane ceiling for a single small restaurant's item list
+// Recipe gets its own cap, bigger than STRING_CAP: recipes are entered "one
+// ingredient per line" (onboarding.html's own placeholder), so this isn't a
+// name-sized field — 4000 chars is generous for even a long ingredient list
+// (dozens of lines with room to spare) while still bounding what a bad or
+// malicious client can make us encrypt and store.
+const RECIPE_MAX_LENGTH = 4000;
 const BINDINGS_MAX_KEYS = 200; // hard cap on client-supplied key count, checked before we loop
 const GOAL_TARGET_MAX = 100000; // sane ceiling for a small business's daily customer/sales count
 
@@ -75,10 +97,11 @@ const OWNER_CONTEXT_MAX = 20;
 // generate-directive.js's variableDiffLog was permanently `[]` because
 // nothing anywhere recorded a change; this closes that gap. Only the
 // fields the founder named as real business decisions are tracked here:
-// setup identity fields, product.type/temp/toppings/extras (never
-// product.recipe — that field is never read from client input anywhere in
-// this file today, matching onboarding.html's own on-screen privacy
-// promise, and must never be diffed or logged, full stop), the 7-day
+// setup identity fields, product.type/temp/toppings/extras, product.recipe
+// (SINCE 2026-07-23 — previously "never, full stop" per the old privacy
+// promise; see the RECIPE REVERSAL note in this file's header. Recipe
+// changes are logged as an ENCRYPTED line-diff, never as plaintext
+// oldValue/newValue — see the recipe-diff block in the handler), the 7-day
 // schedule (per-day open/start/end), and goal.metric/goal.target. Follows
 // this codebase's own established index+record pattern (see
 // submit-review.js's qrcommentindex:<accountId>/qrcomment:<accountId>:
@@ -149,7 +172,13 @@ function sanitizeBindingEntry(entry) {
 function sanitizeProduct(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const temp = raw.temp === 'Hot' || raw.temp === 'Cold' ? raw.temp : '';
-  // recipe is intentionally never read from `raw` here — see file header.
+  // recipe is deliberately NOT handled here even though it's accepted now
+  // (see the RECIPE REVERSAL note in the file header): this function's
+  // output is plaintext-merged into profile.product, and the recipe must
+  // never be stored as plaintext. It has its own encrypt-before-store block
+  // in the handler instead — keeping it out of this merge also means a
+  // product save that omits recipe leaves the existing encrypted recipe
+  // untouched, exactly like every other merge-preserved field.
   return {
     type: cleanString(raw.type, 200),
     temp: temp,
@@ -195,6 +224,31 @@ function sanitizeGoal(raw) {
 // could confuse downstream key-parsing.
 function slugifyPath(path) {
   return String(path).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+// Line-based recipe diff — recipes are entered "one ingredient per line"
+// (onboarding.html's own placeholder), so a line diff IS an ingredient
+// diff, which is exactly the granularity the directive engine's flagship
+// example reasons at ("removing the brown sugar..."). Lines are trimmed and
+// compared case-insensitively so "Brown Sugar" -> "brown sugar" or a
+// reordered list never gets logged as a fake ingredient change. Returns
+// { added: [...], removed: [...] } or null when nothing real changed.
+// The RETURNED PLAINTEXT NEVER TOUCHES KV DIRECTLY — the caller encrypts
+// the whole diff object via encryptRecipeText before storing it (storing a
+// plaintext ingredient diff would leak the most identifying parts of the
+// recipe and defeat the point of encrypting the field itself).
+function computeRecipeLineDiff(oldText, newText) {
+  function lines(text) {
+    return String(text).split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+  const oldLines = lines(oldText);
+  const newLines = lines(newText);
+  const oldSet = new Set(oldLines.map(function (s) { return s.toLowerCase(); }));
+  const newSet = new Set(newLines.map(function (s) { return s.toLowerCase(); }));
+  const added = newLines.filter(function (s) { return !oldSet.has(s.toLowerCase()); });
+  const removed = oldLines.filter(function (s) { return !newSet.has(s.toLowerCase()); });
+  if (added.length === 0 && removed.length === 0) return null;
+  return { added: added, removed: removed };
 }
 
 function scheduleByDay(schedule) {
@@ -300,6 +354,44 @@ module.exports = async function handler(req, res) {
       if (product) profile.product = Object.assign({}, profile.product, product);
     }
 
+    // product.recipe — accepted since 2026-07-23 (see the RECIPE REVERSAL
+    // note in the file header), encrypted BEFORE it is ever stored. The
+    // plaintext exists only in this request's memory: it's length-capped,
+    // compared against the DECRYPTED previous value (the stored form is
+    // ciphertext and would never plaintext-equal anything, so the normal
+    // diffField comparison can't work here), line-diffed if it really
+    // changed, then encrypted into profile.product.recipe. Nothing below
+    // this block ever sees the plaintext again, and it never appears in any
+    // response, log line, or plaintext changelog record.
+    //
+    // Judgment call, matching this file's existing empty-string rejection
+    // style (cleanString + truthiness): an empty/whitespace-only recipe is
+    // ignored rather than treated as a delete — there's no "clear my
+    // recipe" UI anywhere today, so an empty value here is far more likely
+    // a client bug than an intentional erase of the owner's most sensitive
+    // field.
+    let recipeDiff = null; // plaintext { added, removed } — encrypted at the changelog write site below
+    if (body.product && typeof body.product === 'object' && typeof body.product.recipe === 'string') {
+      const recipePlain = body.product.recipe.trim().slice(0, RECIPE_MAX_LENGTH);
+      if (recipePlain) {
+        const previousStored =
+          existing.product && existing.product.recipe && typeof existing.product.recipe === 'object'
+            ? existing.product.recipe
+            : null;
+        // '' here means either "no recipe ever stored" (first save —
+        // onboarding, not a revision, so no changelog entry, matching
+        // diffField()'s own both-defined guard) or "stored blob failed to
+        // decrypt" (tampered/rotated key — no honest diff is computable, so
+        // none is invented; the new value still gets stored below).
+        const previousPlain = previousStored ? decryptRecipeText(previousStored) : '';
+        if (previousPlain && previousPlain !== recipePlain) {
+          recipeDiff = computeRecipeLineDiff(previousPlain, recipePlain);
+        }
+        profile.product = profile.product && typeof profile.product === 'object' ? profile.product : {};
+        profile.product.recipe = encryptRecipeText(recipePlain);
+      }
+    }
+
     if (body.schedule !== undefined) {
       const schedule = sanitizeSchedule(body.schedule);
       if (schedule) profile.schedule = schedule;
@@ -377,9 +469,13 @@ module.exports = async function handler(req, res) {
     // way, since a section that wasn't sent leaves `profile` equal to
     // `existing` for those fields, which never produces a diff.
     //
-    // product.recipe is never included here — it is never read from client
-    // input anywhere in this file (see sanitizeProduct above) and this is a
-    // hard privacy line, not a style choice.
+    // product.recipe is handled by its own dedicated block above the
+    // changelog write below (SINCE 2026-07-23 — it used to be a hard "never
+    // diffed or logged, full stop" line; see the RECIPE REVERSAL note in
+    // the file header for why that changed): its stored form is ciphertext,
+    // so it can't go through diffField()'s plaintext comparison, and its
+    // changelog record stores an ENCRYPTED line-diff instead of plaintext
+    // oldValue/newValue.
     //
     // A field moving from undefined to a real value (first-ever save) is
     // onboarding, not a business decision being revised, and is never
@@ -406,7 +502,8 @@ module.exports = async function handler(req, res) {
     diffField('product.temp', 'temp', oldProduct.temp, newProduct.temp);
     diffField('product.toppings', 'toppings', oldProduct.toppings, newProduct.toppings);
     diffField('product.extras', 'extras', oldProduct.extras, newProduct.extras);
-    // product.recipe: NEVER diffed/logged — see comment block above.
+    // product.recipe: diffed via its own encrypt-aware block above (see
+    // `recipeDiff`), never through diffField — see comment block above.
 
     const oldScheduleByDay = scheduleByDay(existing.schedule);
     const newScheduleByDay = scheduleByDay(profile.schedule);
@@ -423,7 +520,7 @@ module.exports = async function handler(req, res) {
     diffField('goal.metric', 'metric', oldGoal.metric, newGoal.metric);
     diffField('goal.target', 'target', oldGoal.target, newGoal.target);
 
-    if (changeEntries.length > 0) {
+    if (changeEntries.length > 0 || recipeDiff) {
       const changeTimestamp = Date.now(); // server-assigned, never client-supplied
       const changedAt = new Date(changeTimestamp).toISOString();
       const changeDate = changedAt.slice(0, 10);
@@ -442,6 +539,25 @@ module.exports = async function handler(req, res) {
         });
         pipeline.zadd(indexKey, { score: changeTimestamp, member: recordKey });
       });
+      // Recipe change record — same key scheme/index as every other tracked
+      // field, but NO plaintext oldValue/newValue (storing before/after
+      // recipe text in the clear would defeat encrypting the field itself).
+      // Instead: encryptedDiff, an AES-256-GCM blob whose plaintext is
+      // JSON.stringify({ added: [...], removed: [...] }) — the line-level
+      // ingredient diff computeRecipeLineDiff() produced above.
+      // generate-directive.js's loadVariableDiffLog() decrypts it in memory
+      // when building the reasoning prompt (see that file's SWAP POINT 3).
+      if (recipeDiff) {
+        const recipeRecordKey = `changelog:${accountId}:${changeTimestamp}:${slugifyPath('product.recipe')}`;
+        pipeline.set(recipeRecordKey, {
+          date: changeDate,
+          path: 'product.recipe',
+          field: 'recipe',
+          encryptedDiff: encryptRecipeText(JSON.stringify(recipeDiff)),
+          changedAt: changedAt,
+        });
+        pipeline.zadd(indexKey, { score: changeTimestamp, member: recipeRecordKey });
+      }
       await pipeline.exec();
 
       // Best-effort cap — never let a trim failure block a real profile

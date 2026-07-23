@@ -461,7 +461,7 @@
         <label>4. Any other significant items that could've been here? Matcha tea? (Optional)
           <input type="text" id="product-extras">
         </label>
-        <label>5. The most important part (this stays between you and the ai, NEVER US — it's saved on this device/browser only, not to your account, and we will never ever share this): define the recipe, ingredients only right now. We assume you have best food practices, so we won't ask anything else past that.
+        <label>5. The most important part: define the recipe, ingredients only right now. This one is saved to your account so your ai can catch it when a recipe change moves your numbers — it's locked with encryption before it's stored, so no person can read it. Not us, not staff, nobody. It's only ever unlocked for a moment, by the system, to work on your own reads — never shown to anyone, never shared, never sold. We assume you have best food practices, so we won't ask anything else past that.
           <textarea id="product-recipe" placeholder="One ingredient per line" required></textarea>
         </label>
         <button type="submit">Continue</button>
@@ -532,10 +532,24 @@
   // checked, so anyone who obtained another business's accountId could
   // overwrite that business's profile.
   //
-  // PRIVACY — DELIBERATE: the recipe (state.product.recipe) is EXCLUDED
-  // from every payload below. The on-screen promise says the recipe
-  // "stays between you and the ai, NEVER US" — this exclusion is what
-  // keeps that promise true. Never add the recipe to any server payload.
+  // PRIVACY — REVERSED 2026-07-23, deliberately, by the founder: the recipe
+  // (state.product.recipe) used to be EXCLUDED from every payload below,
+  // keeping the old on-screen promise ("stays between you and the ai,
+  // NEVER US") true, and a hard "never add the recipe to any server
+  // payload" rule stood here. The founder reversed it in his own words —
+  // "then switch it, its their ai manager if its needed to work some lines
+  // need to be crossed but acknowledge and protected and showed proof of
+  // protection" — because the old exclusion was the only reason the
+  // flagship recipe-level directive could never fire on real data. The
+  // recipe now ships in completeOnboarding()'s product payload; the
+  // on-screen copy (screen-product's question 5) and privacy.html were
+  // rewritten in the same pass, and server-side the text is encrypted at
+  // rest before it ever touches storage (save-profile.js +
+  // api/_recipe-crypto.js — AES-256-GCM, key server-side only, never
+  // returned in any response, changelog stores an encrypted line-diff
+  // only). This client never does any crypto itself and never reads the
+  // recipe back from the server — it only sends it, once, over the same
+  // authenticated call every other field already uses.
   // ============================================================
 
   const API = {
@@ -602,7 +616,9 @@
       return this.post('/api/save-profile', { schedule: state.schedule });
     },
     completeOnboarding() {
-      // Recipe deliberately omitted — see the seam-wide privacy note above.
+      // Recipe included since 2026-07-23 (founder-directed reversal — see
+      // the seam-wide PRIVACY note above for the full why). The server
+      // encrypts it before storing; this client just sends the text once.
       return this.post('/api/save-profile', {
         setup: {
           businessName: state.setup.businessName,
@@ -616,6 +632,7 @@
           temp: state.product.temp,
           toppings: state.product.toppings,
           extras: state.product.extras,
+          recipe: state.product.recipe,
         },
         schedule: state.schedule,
         stickerCount: Object.keys(state.bindings).length,
@@ -1438,7 +1455,9 @@
     state.product.type = $('product-type').value.trim();
     state.product.toppings = $('product-toppings').value.trim();
     state.product.extras = $('product-extras').value.trim();
-    // Recipe: saved locally ONLY — never sent to any server. See the seam note.
+    // Recipe: kept in local state here, then sent to the server ONCE, at
+    // completeOnboarding() — since 2026-07-23 (founder-directed reversal;
+    // see the seam-wide PRIVACY note above). It used to be local-only.
     state.product.recipe = $('product-recipe').value;
     saveState();
     go('schedule');
