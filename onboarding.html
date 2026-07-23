@@ -95,6 +95,18 @@
 
   .screen { display: flex; flex-direction: column; gap: 1rem; }
   .screen[hidden] { display: none; }
+  .ob-overlay {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center; padding: 1.25rem;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+  }
+  .ob-overlay[hidden] { display: none; }
+  .ob-overlay-card {
+    max-width: 420px; width: 100%; border: 1px solid var(--line); border-radius: 14px;
+    background: var(--bg); padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;
+  }
+  .ob-overlay-card h2 { font-size: 1.15rem; margin: 0; }
+  .ob-overlay-card p { margin: 0; line-height: 1.5; color: var(--ink-soft); font-size: .92rem; }
 
   button {
     font-family: var(--font);
@@ -124,6 +136,7 @@
 
   form { display: flex; flex-direction: column; gap: .85rem; }
   label, .field-label { display: flex; flex-direction: column; gap: .35rem; font-size: .85rem; color: var(--ink-soft); }
+  label[hidden] { display: none; } /* author-origin `label{display:flex}` above otherwise beats the UA-stylesheet [hidden] rule regardless of source order, since normal-importance author rules always win over normal-importance UA ones -- real bug found live 2026-07-23: package-address-row stayed visually flex-displayed despite .hidden === true */
   .ob-checkbox-row {
     flex-direction: row; align-items: center; gap: .6rem;
     font-size: .9rem; color: var(--ink); cursor: pointer;
@@ -170,7 +183,15 @@
   .inv-rows { display: flex; flex-direction: column; gap: .6rem; }
   .inv-row { display: flex; gap: .5rem; align-items: center; }
   .inv-row input[data-kind="name"] { flex: 1; }
-  .inv-row input[data-kind="count"] { width: 5.2em; flex: none; text-align: center; }
+  .inv-count-stepper { display: flex; align-items: center; gap: .3rem; flex: none; }
+  .inv-count-stepper input[data-kind="count"] { width: 3.6em; flex: none; text-align: center; }
+  .inv-count-btn {
+    flex: none; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink);
+    font-family: var(--font); font-size: 1.1rem; font-weight: 700; cursor: pointer; line-height: 1;
+  }
+  .inv-count-btn:hover { border-color: var(--ink); }
+  .inv-count-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   .inv-remove {
     flex: none; background: none; border: none; color: var(--ink-soft); cursor: pointer;
     font-size: 1.2rem; padding: .2rem .45rem; align-self: auto; line-height: 1; font-weight: 400;
@@ -334,6 +355,13 @@
       <div class="ob-progress">Step 2 of 3</div>
       <h1>Write down everything</h1>
       <p class="soft">Walk around your business and list every item with its count. E.g. 3 tables, 12 chairs, 2 speakers.</p>
+
+      <label>Or just say all the things — we'll sort it out
+        <textarea id="inv-bulk-text" rows="3" placeholder="e.g. tables, chairs, radio, soap dispenser, bathroom door left, bathroom door right, board games"></textarea>
+      </label>
+      <button type="button" class="inv-add" id="inv-bulk-submit">Sort these into a list</button>
+      <div class="status" id="inv-bulk-status"></div>
+
       <div class="inv-rows" id="inv-rows"></div>
       <button type="button" class="inv-add" id="inv-add">+ Add another item</button>
       <button type="button" id="inv-submit">Submit</button>
@@ -341,6 +369,15 @@
       <button type="button" class="tertiary-link" id="inv-back">Back</button>
     </div>
   </section>
+
+  <div class="ob-overlay" id="inv-confirm-overlay" hidden>
+    <div class="ob-overlay-card">
+      <h2>Got everything?</h2>
+      <p>Even the radio? Even the bathroom door — both sides? The board games? The more you list here, the more this can actually help you. Worth one more walk around if you're not sure.</p>
+      <button type="button" id="inv-confirm-yes">Yes, that's everything</button>
+      <button type="button" class="tertiary-link" id="inv-confirm-back">Let me add more</button>
+    </div>
+  </div>
 
   <!-- ============ Screen 2c: Sticker assign ============ -->
   <section class="screen" id="screen-stickers" hidden>
@@ -490,6 +527,9 @@
     },
     submitInventory() {
       return this.post('/api/save-profile', { inventory: state.inventory });
+    },
+    parseInventoryList(text) {
+      return this.post('/api/parse-inventory-list', { text: text });
     },
     saveStickerBinding(sticker, itemId, itemName) {
       // Keyed by the item's stable id (never its list position) so server
@@ -664,6 +704,7 @@
       deliveryAddress: '',
       inventory: [newInventoryRow()],
       inventorySubmitted: false,
+      inventoryConfirmedOnce: false,
       bindings: {},            // sticker number -> { id, name } (id = inventory row's stable id)
       currentSticker: null,
       product: { type: '', temp: '', toppings: '', extras: '', recipe: '' },
@@ -966,7 +1007,11 @@
     rows.forEach(function (row, i) {
       html += '<div class="inv-row">' +
         '<input type="text" data-kind="name" data-i="' + i + '" placeholder="e.g. Tables" value="' + escapeHtml(row.name) + '">' +
-        '<input type="number" data-kind="count" data-i="' + i + '" inputmode="numeric" min="1" step="1" placeholder="How many" value="' + escapeHtml(row.count) + '">' +
+        '<div class="inv-count-stepper">' +
+          '<button type="button" class="inv-count-btn" data-action="minus" data-i="' + i + '" aria-label="Decrease count">&minus;</button>' +
+          '<input type="number" data-kind="count" data-i="' + i + '" inputmode="numeric" min="1" step="1" placeholder="How many" value="' + escapeHtml(row.count) + '">' +
+          '<button type="button" class="inv-count-btn" data-action="plus" data-i="' + i + '" aria-label="Increase count">&plus;</button>' +
+        '</div>' +
         (rows.length > 1 ? '<button type="button" class="inv-remove" data-i="' + i + '" aria-label="Remove this item">&times;</button>' : '') +
       '</div>';
     });
@@ -982,6 +1027,18 @@
       input.addEventListener('input', function (e) {
         rows[Number(e.target.getAttribute('data-i'))].count = e.target.value;
         saveState();
+      });
+    });
+    // +/- steppers — a phone keyboard is the worst way to enter a number
+    // while you're mid-walkaround holding stickers; tapping is much faster.
+    $('inv-rows').querySelectorAll('.inv-count-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        const i = Number(e.currentTarget.getAttribute('data-i'));
+        const action = e.currentTarget.getAttribute('data-action');
+        const current = Math.max(0, Math.floor(Number(rows[i].count)) || 0);
+        rows[i].count = String(action === 'plus' ? current + 1 : Math.max(1, current - 1));
+        saveState();
+        renderInventoryRows();
       });
     });
     $('inv-rows').querySelectorAll('.inv-remove').forEach(function (btn) {
@@ -1001,6 +1058,74 @@
     if (inputs.length) inputs[inputs.length - 1].focus();
   }
 
+  // "Or just say all the things" — a quick AI call (api/parse-inventory-
+  // list.js) turns a raw, messy, comma/line-separated dump into distinct
+  // item rows, each defaulting to a count of 1 (the steppers above make
+  // fixing the real count fast). Falls back to a plain split if the AI
+  // isn't configured — see that endpoint's own fallback, never a dead end.
+  function handleInventoryBulkSubmit() {
+    const text = $('inv-bulk-text').value.trim();
+    if (!text) {
+      $('inv-bulk-status').textContent = 'Type your list first.';
+      return;
+    }
+    $('inv-bulk-status').textContent = 'Sorting…';
+    API.parseInventoryList(text).then(function (data) {
+      if (!data || !Array.isArray(data.items) || data.items.length === 0) {
+        $('inv-bulk-status').textContent = "Couldn't sort that — try listing a few things separated by commas.";
+        return;
+      }
+      const existingNames = state.inventory.map(function (r) { return r.name.trim().toLowerCase(); });
+      let added = 0;
+      data.items.forEach(function (name) {
+        const clean = String(name).trim();
+        if (!clean || existingNames.indexOf(clean.toLowerCase()) !== -1) return;
+        state.inventory.push({ name: clean, count: '1' });
+        existingNames.push(clean.toLowerCase());
+        added += 1;
+      });
+      // Drop any leftover fully-empty spare row now that real rows exist —
+      // matches handleInventorySubmit()'s own "empty spare rows are fine to
+      // drop" posture, just applied a step earlier so the list doesn't end
+      // with a lone blank row under a pile of real ones.
+      state.inventory = state.inventory.filter(function (r, i) {
+        return r.name.trim() !== '' || state.inventory.length === 1 && i === 0;
+      });
+      $('inv-bulk-text').value = '';
+      $('inv-bulk-status').textContent = added > 0 ? 'Added ' + added + (added === 1 ? ' item.' : ' items.') : 'Already had all of those.';
+      saveState();
+      renderInventoryRows();
+    }).catch(function () {
+      $('inv-bulk-status').textContent = "Couldn't reach the server — try again.";
+    });
+  }
+
+  // ---------- Screen 2b: "got everything?" one-time confirmation ----------
+  // "A one-time pause" — only interrupts the FIRST successful submit per
+  // onboarding run (state.inventoryConfirmedOnce), not every subsequent
+  // edit-then-resubmit. Nudges toward exhaustiveness (the more tracked
+  // items, the more real value the QR/directive system has to work with)
+  // without becoming an annoying repeat gate.
+  function finalizeInventorySubmit() {
+    const cleaned = state.inventory.filter(function (row) {
+      return row.name.trim() !== '' && Number(row.count) > 0;
+    }).map(function (row) {
+      return { id: row.id || genItemId(), name: row.name.trim(), count: Math.floor(Number(row.count)) };
+    });
+    $('inv-status').textContent = '';
+    state.inventory = cleaned;
+    state.inventorySubmitted = true;
+    const dropped = reconcileBindings();
+    saveState();
+    API.submitInventory();
+    go('stickers');
+    if (dropped > 0) {
+      $('sticker-status').textContent = dropped === 1
+        ? '1 sticker was on an item you removed — that sticker is free to use again.'
+        : dropped + ' stickers were on items you removed — those stickers are free to use again.';
+    }
+  }
+
   function handleInventorySubmit() {
     // A half-filled row is a mistake, not noise — point at it instead of
     // silently deleting the user's work. (Fully empty spare rows are fine.)
@@ -1017,27 +1142,29 @@
         return;
       }
     }
-    const cleaned = state.inventory.filter(function (row) {
+    const hasAnyRealRow = state.inventory.some(function (row) {
       return row.name.trim() !== '' && Number(row.count) > 0;
-    }).map(function (row) {
-      return { id: row.id || genItemId(), name: row.name.trim(), count: Math.floor(Number(row.count)) };
     });
-    if (cleaned.length === 0) {
+    if (!hasAnyRealRow) {
       $('inv-status').textContent = 'Add at least one item with a count first.';
       return;
     }
-    $('inv-status').textContent = '';
-    state.inventory = cleaned;
-    state.inventorySubmitted = true;
-    const dropped = reconcileBindings();
-    saveState();
-    API.submitInventory();
-    go('stickers');
-    if (dropped > 0) {
-      $('sticker-status').textContent = dropped === 1
-        ? '1 sticker was on an item you removed — that sticker is free to use again.'
-        : dropped + ' stickers were on items you removed — those stickers are free to use again.';
+    if (!state.inventoryConfirmedOnce) {
+      $('inv-confirm-overlay').hidden = false;
+      return;
     }
+    finalizeInventorySubmit();
+  }
+
+  function handleInventoryConfirmYes() {
+    state.inventoryConfirmedOnce = true;
+    saveState();
+    $('inv-confirm-overlay').hidden = true;
+    finalizeInventorySubmit();
+  }
+
+  function handleInventoryConfirmBack() {
+    $('inv-confirm-overlay').hidden = true;
   }
 
   // ---------- Screen 2c: stickers ----------
@@ -1368,9 +1495,12 @@
     $('package-continue').addEventListener('click', function () { go('inventory'); });
     $('manual-back').addEventListener('click', function () { go('package'); });
 
+    $('inv-bulk-submit').addEventListener('click', handleInventoryBulkSubmit);
     $('inv-add').addEventListener('click', handleInventoryAdd);
     $('inv-submit').addEventListener('click', handleInventorySubmit);
-    $('inv-back').addEventListener('click', function () { go('package'); });
+    $('inv-back').addEventListener('click', function () { go('manual'); });
+    $('inv-confirm-yes').addEventListener('click', handleInventoryConfirmYes);
+    $('inv-confirm-back').addEventListener('click', handleInventoryConfirmBack);
 
     $('sticker-use').addEventListener('click', handleStickerManual);
     $('sticker-number').addEventListener('keydown', function (e) {
