@@ -136,6 +136,8 @@
   }
 
   form { display: flex; flex-direction: column; gap: .85rem; }
+  #setup-tier-block { display: flex; flex-direction: column; gap: .6rem; margin-top: .5rem; }
+  #setup-tier-block button { align-self: stretch; }
   label, .field-label { display: flex; flex-direction: column; gap: .35rem; font-size: .85rem; color: var(--ink-soft); }
   label[hidden] { display: none; } /* author-origin `label{display:flex}` above otherwise beats the UA-stylesheet [hidden] rule regardless of source order, since normal-importance author rules always win over normal-importance UA ones -- real bug found live 2026-07-23: package-address-row stayed visually flex-displayed despite .hidden === true */
   .ob-checkbox-row {
@@ -311,8 +313,16 @@
           <input type="text" id="setup-product" placeholder="Chicken" required>
           <span class="soft">Example: what would a customer say when describing you? "The chicken restaurant." Even though you sell other things, you probably sell chicken at your core.</span>
         </label>
-        <button type="submit" id="setup-pay">Pay $20 for your ai infrastructure package</button>
+        <button type="submit" id="setup-pay">Continue</button>
       </form>
+
+      <div id="setup-tier-block" hidden>
+        <p><strong>Which matters more to you right now?</strong></p>
+        <button type="button" id="tier-light-btn">Save money — $20/mo</button>
+        <button type="button" id="tier-full-btn">Get the most out of it — $100/mo</button>
+        <p class="soft">This sets which plan you start on — you can reach out anytime to switch.</p>
+      </div>
+
       <div class="status" id="setup-status"></div>
       <button type="button" class="tertiary-link" id="setup-paid-confirm" hidden>I've paid — continue</button>
       <button type="button" class="tertiary-link" id="setup-back">Back</button>
@@ -471,8 +481,17 @@
 </main>
 
 <script>
-  // Real Stripe Payment Link — $20 "ai infrastructure package" charge.
-  const PAYMENT_LINK = 'https://buy.stripe.com/eVq00l3uv64S57R6ep9k400';
+  // Real Stripe Payment Links, one per tier — the "save money" vs. "get the
+  // most out of it" fork on screen-setup opens the matching one.
+  // TODO(founder): confirm PAYMENT_LINK_LIGHT is actually a recurring
+  // $20/MONTH subscription link, not the old one-time $20 setup charge it
+  // used to be — reused here as a placeholder since it's the only real link
+  // that exists today. PAYMENT_LINK_FULL is empty until the founder creates
+  // a real $100/mo link; empty falls back to the same honest "not connected
+  // yet (test mode)" posture handleTierChoice() already uses for
+  // PAYMENT_LINK_LIGHT, so neither path can silently fake a real charge.
+  const PAYMENT_LINK_LIGHT = 'https://buy.stripe.com/eVq00l3uv64S57R6ep9k400';
+  const PAYMENT_LINK_FULL = '';
 
   // ============================================================
   // SERVER SEAM — /api/save-profile.js is now real (account-scoped,
@@ -527,13 +546,13 @@
         deliveryAddress: state.deliveryAddress,
       });
     },
-    recordPayment(mode) {
+    recordPayment(mode, tier) {
       // Folded into /api/save-profile.js (session-cookie authenticated, same
       // as every other call here) — /api/onboarding-payment never existed as
       // a real file, so this always 404'd silently. amount is fixed
-      // server-side to the real $20 price; the server never trusts a
-      // client-supplied amount.
-      return this.post('/api/save-profile', { payment: { mode: mode } });
+      // server-side per tier (light=$20/mo, full=$100/mo); the server never
+      // trusts a client-supplied amount.
+      return this.post('/api/save-profile', { payment: { mode: mode, tier: tier } });
     },
     recordPackageReceived() {
       return this.post('/api/save-profile', { packageReceived: true });
@@ -722,6 +741,7 @@
       account: null,          // { id, email } — set on sign up / log in. Password is NEVER stored here or anywhere.
       setup: { businessName: '', ownerName: '', address: '', coreProduct: '' },
       paid: false,
+      tier: null,              // 'light' ($20/mo, save money) or 'full' ($100/mo, get the most out of it) — set the moment the owner picks one, before payment even opens
       paymentStarted: false,   // the payment page was opened at least once
       deliveryAddress: '',
       inventory: [newInventoryRow()],
@@ -938,15 +958,33 @@
     $('setup-owner').value = state.setup.ownerName;
     $('setup-address').value = state.setup.address;
     $('setup-product').value = state.setup.coreProduct;
-    // Survive a reload after the payment page was opened: keep the
-    // "I've paid — continue" path visible so nobody is pushed to pay twice.
-    $('setup-paid-confirm').hidden = !(state.paymentStarted && !state.paid);
-    if (state.paymentStarted && !state.paid) {
-      $('setup-status').textContent = 'Already paid on the payment page? Tap "I\'ve paid — continue" below.';
+
+    if (state.paid) {
+      // Already paid (e.g. came back to this screen via Back from package)
+      // — show the form normally, just past the point of asking again.
+      $('setup-form').hidden = false;
+      $('setup-tier-block').hidden = true;
+      $('setup-paid-confirm').hidden = true;
+      $('setup-pay').textContent = 'Continue';
+      return;
     }
-    $('setup-pay').textContent = state.paid
-      ? 'Continue'
-      : 'Pay $20 for your ai infrastructure package';
+
+    if (state.paymentStarted) {
+      // Survive a reload after the payment page was opened: keep the
+      // "I've paid — continue" path visible so nobody is pushed to pay
+      // twice, or asked the tier question a second time for a choice
+      // they've already made.
+      $('setup-form').hidden = true;
+      $('setup-tier-block').hidden = true;
+      $('setup-paid-confirm').hidden = false;
+      $('setup-status').textContent = 'Already paid on the payment page? Tap "I\'ve paid — continue" below.';
+      return;
+    }
+
+    $('setup-form').hidden = false;
+    $('setup-tier-block').hidden = true;
+    $('setup-paid-confirm').hidden = true;
+    $('setup-pay').textContent = 'Continue';
   }
 
   function readSetupForm() {
@@ -963,18 +1001,33 @@
     readSetupForm();
     API.saveSetup();
     if (state.paid) { go('package'); return; }
-    if (PAYMENT_LINK) {
+    // Ask which matters more BEFORE opening any payment link — an honest
+    // fork (two genuinely different real plans), not a fake-choice
+    // mechanic: the price is shown plainly on both options, and picking
+    // one opens that plan's own real payment link, nothing hidden or
+    // revealed only after committing.
+    $('setup-form').hidden = true;
+    $('setup-tier-block').hidden = false;
+  }
+
+  function startTierPayment(tier) {
+    state.tier = tier;
+    saveState();
+    const link = tier === 'full' ? PAYMENT_LINK_FULL : PAYMENT_LINK_LIGHT;
+    if (link) {
       state.paymentStarted = true;
       saveState();
-      window.open(PAYMENT_LINK, '_blank');
+      window.open(link, '_blank');
+      $('setup-tier-block').hidden = true;
       $('setup-status').textContent = 'A payment page just opened. Come back here when you are done.';
       $('setup-paid-confirm').hidden = false;
     } else {
-      // No hosted payment link connected yet — nothing is silently faked.
+      // No hosted payment link connected yet for this tier — nothing is
+      // silently faked, same posture as the original single-tier version.
       $('setup-status').textContent = 'Payment link not connected yet (test mode)';
       state.paid = true;
       saveState();
-      API.recordPayment('test-mode');
+      API.recordPayment('test-mode', tier);
       setTimeout(function () { go('package'); }, 1100);
     }
   }
@@ -982,7 +1035,7 @@
   function handlePaidConfirm() {
     state.paid = true;
     saveState();
-    API.recordPayment('payment-link');
+    API.recordPayment('payment-link', state.tier);
     go('package');
   }
 
@@ -1508,6 +1561,8 @@
     $('auth-back').addEventListener('click', function () { go('intro'); });
 
     $('setup-form').addEventListener('submit', handleSetupSubmit);
+    $('tier-light-btn').addEventListener('click', function () { startTierPayment('light'); });
+    $('tier-full-btn').addEventListener('click', function () { startTierPayment('full'); });
     $('setup-paid-confirm').addEventListener('click', handlePaidConfirm);
     $('setup-back').addEventListener('click', function () { go('auth'); });
 

@@ -46,7 +46,13 @@ const GOAL_TARGET_MAX = 100000; // sane ceiling for a small business's daily cus
 // is appended to an array (never overwritten) so the record stays a real
 // audit trail even if the client confirms more than once.
 const PAYMENT_MODES = ['payment-link', 'test-mode'];
-const PAYMENT_AMOUNT = 20; // must match the live $20 charge shown in onboarding.html's Step 1 button
+// TIER (new): the "save money" vs. "get the most out of it" fork onboarding.html
+// asks right before opening a payment link. amount is keyed by tier and never
+// trusted from the client, same posture as the old single PAYMENT_AMOUNT this
+// replaces — server always assigns the real price for whichever tier was
+// actually chosen, matching whatever payment link onboarding.html opened.
+const TIER_VALUES = ['light', 'full'];
+const PAYMENT_AMOUNTS = { light: 20, full: 100 };
 const PAYMENTS_MAX = 20; // sane ceiling — this is a one-time onboarding charge, not a ledger
 // Inventory item IDs and sticker-binding item IDs are stored inside KV keys
 // elsewhere in this app (KV keys use ':' as a segment delimiter, e.g.
@@ -144,10 +150,12 @@ function sanitizeGoal(raw) {
 function sanitizePayment(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const mode = PAYMENT_MODES.indexOf(raw.mode) !== -1 ? raw.mode : null;
-  if (!mode) return null;
-  // amount is never trusted from the client — always the fixed real price,
-  // server-assigned, exactly like the timestamp below.
-  return { amount: PAYMENT_AMOUNT, mode: mode, confirmedAt: new Date().toISOString() };
+  const tier = TIER_VALUES.indexOf(raw.tier) !== -1 ? raw.tier : null;
+  if (!mode || !tier) return null;
+  // amount is never trusted from the client — always the fixed real price
+  // for whichever tier was chosen, server-assigned, exactly like the
+  // timestamp below.
+  return { amount: PAYMENT_AMOUNTS[tier], tier: tier, mode: mode, confirmedAt: new Date().toISOString() };
 }
 
 module.exports = async function handler(req, res) {
@@ -233,6 +241,7 @@ module.exports = async function handler(req, res) {
           profile.payments = profile.payments.slice(profile.payments.length - PAYMENTS_MAX);
         }
         profile.paid = true;
+        profile.tier = payment.tier;
       }
     }
 
