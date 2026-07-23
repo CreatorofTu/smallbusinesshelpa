@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quick feedback</title>
+<!--
+  ============================================================
+  review.html — the real customer-facing QR scan page, per
+  PRODUCT-CONTEXT.md's "QR-code environment-review system" section
+  (especially "Resolved: one generic scan page for every variable" and the
+  "Technical shape" subsection's own requirement).
+
+  DELIBERATELY A SEPARATE, STANDALONE FILE — NOT a route inside
+  index.html/onboarding.html, and NOT wired into either of their app state,
+  chrome, or login. On purpose, this file:
+    - has NO <link rel="manifest">  — a customer scanning a wall-mounted
+      code must never get an "Add to Home Screen" prompt.
+    - registers NO service worker    — same reason, and this page has no
+      offline/push use case of its own.
+    - reads/writes NONE of the owner app's localStorage keys (jaeBusinessType,
+      jaeFirstProduct, any session/account state) — a customer here is a
+      different, anonymous, one-time actor, never conflated with the owner.
+    - has no login wall, ever, for anyone landing here — per PRODUCT-
+      CONTEXT.md's own locked rule, restated in every QR section of that doc.
+
+  Only the VISUAL system (fonts, colors, card/button idioms) is copied from
+  onboarding.html/index.html — copied stylistically, not inherited
+  structurally. If the brand system ever changes, this file needs its own
+  manual update; it does not share a stylesheet with the owner app.
+
+  URL shape: /review.html?business=<accountId>[&item=<itemId>]
+  No item  = the general/door code. With item = one specific QR-stickered
+  environment item. Fetches its question set from /api/qr-questions and
+  posts the answer to /api/submit-review — see those files' own headers for
+  the full contract.
+  ============================================================
+-->
+
+<style>
+  @font-face {
+    font-family: 'Fustat';
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/Fustat-Variable.ttf') format('truetype-variations');
+  }
+
+  :root {
+    --bg: #ffffff;
+    --ink: #000000;
+    --ink-soft: #666666;
+    --line: #e0e0e0;
+    --font: 'Fustat', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+  }
+  main {
+    width: 100%;
+    max-width: 520px;
+    padding: 2rem 1.25rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .wordmark {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.25rem;
+  }
+  h1 {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.25rem;
+    line-height: 1.3;
+    margin: 0;
+    text-wrap: balance;
+  }
+  p { margin: 0; line-height: 1.55; }
+  .soft { color: var(--ink-soft); font-size: .9rem; }
+
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%);
+  }
+
+  .disclosure {
+    font-size: .85rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    padding-bottom: .25rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .field { display: flex; flex-direction: column; gap: .4rem; }
+  .field label { font-size: .95rem; font-weight: 700; }
+  .field .opt { font-weight: 400; color: var(--ink-soft); font-size: .8rem; }
+  input[type="text"], input[type="number"], textarea {
+    font-size: 16px; /* never smaller — prevents iOS zoom-on-focus */
+    padding: .7em .8em;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    width: 100%;
+  }
+  textarea { resize: vertical; min-height: 4.5em; line-height: 1.45; }
+  input:focus-visible, textarea:focus-visible, button:focus-visible {
+    outline: 2px solid var(--ink); outline-offset: 2px;
+  }
+
+  .choice-row { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .choice-btn {
+    flex: 1;
+    min-width: 90px;
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1rem;
+    padding: .85rem 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+    min-height: 44px; /* 44x44 minimum tap target */
+  }
+  .choice-btn.selected { border-color: var(--ink); color: var(--ink); background: var(--line); }
+  .choice-btn:hover { border-color: var(--ink); }
+
+  .submit-btn {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.05rem;
+    padding: .9rem 1.2rem;
+    border-radius: 10px;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+    cursor: pointer;
+    min-height: 48px;
+  }
+  .submit-btn:hover { opacity: .85; }
+  .submit-btn:disabled { opacity: .45; cursor: default; }
+
+  .status { font-size: .9rem; color: var(--ink-soft); min-height: 1.2em; }
+  .status.error { color: var(--ink); font-weight: 700; }
+
+  .confirm-card {
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 1.4rem 1.2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+  .confirm-card .check { font-size: 2rem; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="wordmark">Justaddegg</div>
+
+  <section id="screen-loading">
+    <p class="soft">Loading...</p>
+  </section>
+
+  <section id="screen-error" hidden>
+    <div class="card">
+      <h1>We couldn't load this</h1>
+      <p class="soft" id="error-message">This code doesn't look right. Try scanning it again.</p>
+    </div>
+  </section>
+
+  <section id="screen-form" hidden>
+    <div class="card">
+      <p class="disclosure">
+        Your answers go straight to this business's owner to help them improve — never shown to
+        anyone else, never tied to your name. The owner sees what our AI learns from everyone's
+        answers together, never your exact words.
+      </p>
+
+      <h1 id="form-heading">Quick feedback</h1>
+      <div id="item-questions"></div>
+      <div id="core-product-questions"></div>
+
+      <button type="button" class="submit-btn" id="submit-btn">Send</button>
+      <div class="status" id="form-status"></div>
+    </div>
+  </section>
+
+  <section id="screen-done" hidden>
+    <div class="confirm-card">
+      <div class="check">&#10003;</div>
+      <h1>Thanks — got it.</h1>
+      <p class="soft">Your answer was sent to the owner. Nothing else to do here.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  function $(id) { return document.getElementById(id); }
+
+  function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function showScreen(id) {
+    ['screen-loading', 'screen-error', 'screen-form', 'screen-done'].forEach(function (s) {
+      $(s).hidden = (s !== id);
+    });
+  }
+
+  var params = new URLSearchParams(window.location.search);
+  var business = (params.get('business') || '').trim();
+  var item = (params.get('item') || '').trim();
+
+  if (!business) {
+    $('error-message').textContent = "This link is missing some information. Ask the owner for a fresh QR code.";
+    showScreen('screen-error');
+    return;
+  }
+
+  var state = {
+    data: null,       // full /api/qr-questions response
+    answers: {},      // itemQuestions answers, keyed by question key
+    coreProduct: {},  // core-product sub-block answers
+  };
+
+  // Renders one uniform question ({key,type,prompt,optional,options}) into
+  // `container`, wiring its input into either state.answers or
+  // state.coreProduct depending on `bucket`.
+  function renderQuestion(container, q, bucket) {
+    var wrap = document.createElement('div');
+    wrap.className = 'field';
+
+    var label = document.createElement('label');
+    label.textContent = q.prompt + (q.optional ? '' : '');
+    if (q.optional) {
+      var opt = document.createElement('span');
+      opt.className = 'opt';
+      opt.textContent = ' (optional)';
+      label.appendChild(opt);
+    }
+    wrap.appendChild(label);
+
+    if (q.type === 'boolean') {
+      var row = document.createElement('div');
+      row.className = 'choice-row';
+      ['Yes', 'No'].forEach(function (opt2) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'choice-btn';
+        btn.textContent = opt2;
+        btn.addEventListener('click', function () {
+          row.querySelectorAll('.choice-btn').forEach(function (b) { b.classList.remove('selected'); });
+          btn.classList.add('selected');
+          state[bucket][q.key] = (opt2 === 'Yes');
+        });
+        row.appendChild(btn);
+      });
+      wrap.appendChild(row);
+    } else if (q.type === 'thumbs') {
+      var row2 = document.createElement('div');
+      row2.className = 'choice-row';
+      [['Good', 'good'], ['Not great', 'not_great']].forEach(function (pair) {
+        var btn2 = document.createElement('button');
+        btn2.type = 'button';
+        btn2.className = 'choice-btn';
+        btn2.textContent = pair[0];
+        btn2.addEventListener('click', function () {
+          row2.querySelectorAll('.choice-btn').forEach(function (b) { b.classList.remove('selected'); });
+          btn2.classList.add('selected');
+          state[bucket][q.key] = pair[1];
+        });
+        row2.appendChild(btn2);
+      });
+      wrap.appendChild(row2);
+    } else if (q.type === 'enum') {
+      var row3 = document.createElement('div');
+      row3.className = 'choice-row';
+      (q.options || []).forEach(function (optVal) {
+        var btn3 = document.createElement('button');
+        btn3.type = 'button';
+        btn3.className = 'choice-btn';
+        btn3.textContent = optVal.charAt(0).toUpperCase() + optVal.slice(1);
+        btn3.addEventListener('click', function () {
+          row3.querySelectorAll('.choice-btn').forEach(function (b) { b.classList.remove('selected'); });
+          btn3.classList.add('selected');
+          state[bucket][q.key] = optVal;
+        });
+        row3.appendChild(btn3);
+      });
+      wrap.appendChild(row3);
+    } else if (q.type === 'number') {
+      var num = document.createElement('input');
+      num.type = 'number';
+      num.min = '0';
+      num.step = '0.01';
+      num.inputMode = 'decimal';
+      num.addEventListener('input', function () {
+        var v = parseFloat(num.value);
+        if (num.value === '') delete state[bucket][q.key];
+        else state[bucket][q.key] = Number.isFinite(v) ? v : undefined;
+      });
+      wrap.appendChild(num);
+    } else {
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.maxLength = 500;
+      input.addEventListener('input', function () {
+        if (input.value.trim()) state[bucket][q.key] = input.value;
+        else delete state[bucket][q.key];
+      });
+      wrap.appendChild(input);
+    }
+
+    container.appendChild(wrap);
+  }
+
+  function render(data) {
+    state.data = data;
+    var heading = data.tier === 'item' && data.itemLabel
+      ? 'How’s the ' + data.itemLabel + '?'
+      : 'How was your visit?';
+    $('form-heading').textContent = heading;
+
+    var itemContainer = $('item-questions');
+    itemContainer.innerHTML = '';
+    (data.questions || []).forEach(function (q) { renderQuestion(itemContainer, q, 'answers'); });
+
+    var cpContainer = $('core-product-questions');
+    cpContainer.innerHTML = '';
+    if (Array.isArray(data.coreProductQuestions) && data.coreProductQuestions.length > 0) {
+      var cpHeading = document.createElement('p');
+      cpHeading.className = 'soft';
+      cpHeading.style.fontWeight = '700';
+      cpHeading.style.marginTop = '.25rem';
+      cpHeading.textContent = data.coreProduct ? ('About your ' + data.coreProduct + ':') : 'One more thing:';
+      cpContainer.appendChild(cpHeading);
+      data.coreProductQuestions.forEach(function (q) { renderQuestion(cpContainer, q, 'coreProduct'); });
+    }
+
+    showScreen('screen-form');
+  }
+
+  function loadQuestions() {
+    var url = '/api/qr-questions?business=' + encodeURIComponent(business) + (item ? '&item=' + encodeURIComponent(item) : '');
+    fetch(url)
+      .then(function (r) {
+        if (!r.ok) throw new Error('load-failed');
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data || data.ok !== true) throw new Error('load-failed');
+        render(data);
+      })
+      .catch(function () {
+        $('error-message').textContent = "This code doesn't look right. Try scanning it again.";
+        showScreen('screen-error');
+      });
+  }
+
+  function submit() {
+    var btn = $('submit-btn');
+    btn.disabled = true;
+    $('form-status').textContent = '';
+    $('form-status').className = 'status';
+
+    var questionPrompts = (state.data.questions || []).map(function (q) { return q.prompt; });
+
+    var payload = {
+      business: business,
+      item: item || null,
+      questions: questionPrompts,
+      answers: state.answers,
+      coreProduct: state.coreProduct,
+    };
+
+    fetch('/api/submit-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          btn.disabled = false;
+          $('form-status').className = 'status error';
+          $('form-status').textContent = (res.body && res.body.error) || "Couldn't send that — try again.";
+          return;
+        }
+        showScreen('screen-done');
+      })
+      .catch(function () {
+        btn.disabled = false;
+        $('form-status').className = 'status error';
+        $('form-status').textContent = "Couldn't send that — check your connection and try again.";
+      });
+  }
+
+  $('submit-btn').addEventListener('click', submit);
+
+  loadQuestions();
+})();
+</script>
+</body>
+</html>
