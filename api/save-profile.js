@@ -351,7 +351,82 @@ function sanitizePayment(raw) {
   return { amount: PAYMENT_AMOUNTS[tier], tier: tier, mode: mode, confirmedAt: new Date().toISOString() };
 }
 
+// ============================================================
+// GET — restores an in-progress onboarding after local data is lost.
+//
+// REAL BUG THIS CLOSES (2026-07-23): onboarding.html's own progress lives in
+// localStorage (see its saveState()/loadState()) and gets written to the
+// server progressively as each step completes — but nothing ever read that
+// server data BACK. A LOGIN to an incomplete account always restarted at
+// screen-setup with blank fields, even though everything already saved
+// server-side was sitting right there — iOS's own well-documented habit of
+// clearing localStorage for installed home-screen web apps made this a real,
+// reproducible loss, not just a theoretical one. This endpoint is the fix:
+// onboarding.html's login handler now calls it and repopulates its local
+// state from the real, already-saved server data before resuming.
+//
+// RECIPE TEXT IS DELIBERATELY NEVER RETURNED HERE, even encrypted — this is
+// a read path reachable right after login, and decrypting recipe text just
+// for onboarding-resume convenience would mean importing the recipe
+// decryption capability into a broader surface than it needs to reach (see
+// api/_recipe-crypto.js's whole reason for existing: recipe plaintext exists
+// in memory ONLY inside generate-directive.js/save-profile.js's own write
+// path, nowhere else). hasRecipe (a boolean, per slot) is returned instead,
+// so the client can show "you already saved a recipe here" without ever
+// touching the ciphertext. Losing a typed-but-unsaved recipe on a data-wipe
+// is a real, smaller residual gap, not exhaustively closed by this endpoint.
+// ============================================================
+function shapeProfileForResume(profile) {
+  const products = profile.products && typeof profile.products === 'object' && !Array.isArray(profile.products)
+    ? profile.products
+    : profile.product && typeof profile.product === 'object'
+      ? { main: profile.product }
+      : {};
+  function shapeSlot(slot) {
+    if (!slot || typeof slot !== 'object') return null;
+    return {
+      type: typeof slot.type === 'string' ? slot.type : '',
+      temp: typeof slot.temp === 'string' ? slot.temp : '',
+      toppings: typeof slot.toppings === 'string' ? slot.toppings : '',
+      extras: typeof slot.extras === 'string' ? slot.extras : '',
+      season: typeof slot.season === 'string' ? slot.season : undefined,
+      hasRecipe: !!(slot.recipe && typeof slot.recipe === 'object'),
+    };
+  }
+  return {
+    setup: profile.setup || null,
+    deliveryAddress: typeof profile.deliveryAddress === 'string' ? profile.deliveryAddress : '',
+    inventory: Array.isArray(profile.inventory) ? profile.inventory : null,
+    bindings: profile.bindings && typeof profile.bindings === 'object' ? profile.bindings : {},
+    products: {
+      main: shapeSlot(products.main),
+      secondary: shapeSlot(products.secondary),
+      seasonal: shapeSlot(products.seasonal),
+    },
+    schedule: Array.isArray(profile.schedule) ? profile.schedule : null,
+    vision: typeof profile.vision === 'string' ? profile.vision : null,
+    tier: typeof profile.tier === 'string' ? profile.tier : null,
+    paid: !!profile.paid,
+    completed: !!profile.completed,
+  };
+}
+
 module.exports = async function handler(req, res) {
+  if (req.method === 'GET') {
+    try {
+      const session = getSessionFromRequest(req);
+      if (!session) {
+        res.status(401).json({ error: 'Not logged in' });
+        return;
+      }
+      const profile = (await kv.get(`profile:${session.accountId}`)) || {};
+      res.status(200).json({ ok: true, profile: shapeProfileForResume(profile) });
+    } catch (err) {
+      res.status(500).json({ error: 'Something went wrong.' });
+    }
+    return;
+  }
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;

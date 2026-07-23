@@ -297,6 +297,7 @@
         <label>Password
           <input type="password" id="auth-password" autocomplete="new-password" minlength="6" required>
         </label>
+        <p class="soft" id="auth-password-strength" hidden></p>
         <button type="submit" id="auth-submit">Create account</button>
       </form>
       <p class="soft" id="auth-legal-note">By creating an account, you agree to our <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
@@ -1072,6 +1073,48 @@
       $('auth-legal-note').hidden = true;
     }
     if (state.account && !$('auth-email').value) $('auth-email').value = state.account.email;
+    // Password-manager hint, correct per mode — the browser/password
+    // manager reads this to decide "offer to generate a new strong
+    // password" (signup) vs. "autofill the one you already have saved"
+    // (login). Sharing one hardcoded value across both modes (the bug
+    // before this fix) confuses password managers on the login path.
+    $('auth-password').setAttribute('autocomplete', authMode === 'signup' ? 'new-password' : 'current-password');
+    // Strength meter is a signup-only concept — a login's password is
+    // whatever it already is, nothing to rate.
+    $('auth-password-strength').hidden = authMode !== 'signup';
+    if (authMode === 'signup') updatePasswordStrength();
+  }
+
+  // Deliberately simple, transparent heuristic — length plus character
+  // variety, not a full entropy calculation (no zxcvbn-style library
+  // vendored for this; the label is a nudge toward a better password, not
+  // a security guarantee, and every password is still bcrypt-hashed
+  // server-side regardless of what this says, per auth-signup.js's own
+  // fixed cost factor).
+  function passwordStrengthLabel(pw) {
+    if (!pw) return null;
+    let score = 0;
+    if (pw.length >= 8) score += 1;
+    if (pw.length >= 12) score += 1;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score += 1;
+    if (/\d/.test(pw)) score += 1;
+    if (/[^A-Za-z0-9]/.test(pw)) score += 1;
+    if (pw.length < 6) return { text: 'Too short — needs 6+ characters', level: 'weak' };
+    if (score <= 1) return { text: 'Weak — try adding a number or symbol', level: 'weak' };
+    if (score <= 3) return { text: 'Okay — longer or more varied is stronger', level: 'fair' };
+    return { text: 'Strong', level: 'strong' };
+  }
+
+  function updatePasswordStrength() {
+    if (authMode !== 'signup') return;
+    const el = $('auth-password-strength');
+    const label = passwordStrengthLabel($('auth-password').value);
+    if (!label) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.textContent = label.text;
   }
 
   function handleAuthModeToggle() {
@@ -1085,6 +1128,66 @@
     const showing = input.type === 'text';
     input.type = showing ? 'password' : 'text';
     $('auth-toggle-visibility').textContent = showing ? 'Show password' : 'Hide password';
+  }
+
+  // Restores in-progress onboarding state from api/save-profile.js's GET
+  // (see that file's own header for the real bug this closes). Called only
+  // on a LOGIN (never signup — nothing to restore for a brand-new account).
+  // Best-effort: a network failure here must never block the login itself
+  // — the owner still gets into the app, just with whatever local state
+  // (possibly blank) already existed, exactly like before this fix. Recipe
+  // TEXT is never restored (see save-profile.js's GET handler on why) —
+  // left blank on purpose; save-profile.js's own existing "empty recipe
+  // never overwrites a stored one" rule (see its per-slot recipe block)
+  // means leaving it blank here is safe, not a silent data-loss path.
+  async function restoreStateFromServer() {
+    try {
+      const res = await fetch('/api/save-profile', { method: 'GET', credentials: 'same-origin' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const profile = data && data.profile;
+      if (!profile) return;
+
+      if (profile.setup && typeof profile.setup === 'object') {
+        state.setup = Object.assign({}, state.setup, profile.setup);
+      }
+      if (typeof profile.deliveryAddress === 'string' && profile.deliveryAddress) {
+        state.deliveryAddress = profile.deliveryAddress;
+      }
+      if (Array.isArray(profile.inventory) && profile.inventory.length > 0) {
+        state.inventory = profile.inventory.map(function (row) {
+          return { id: row.id || genItemId(), name: row.name || '', count: row.count || '' };
+        });
+      }
+      if (profile.bindings && typeof profile.bindings === 'object') {
+        state.bindings = profile.bindings;
+      }
+      if (profile.products && typeof profile.products === 'object') {
+        ['main', 'secondary', 'seasonal'].forEach(function (slot) {
+          const restored = profile.products[slot];
+          if (!restored) return; // slot never onboarded server-side — leave local default (null for secondary/seasonal)
+          const merged = Object.assign(emptyProductSlot(), {
+            type: restored.type || '',
+            temp: restored.temp || '',
+            toppings: restored.toppings || '',
+            extras: restored.extras || '',
+            // recipe deliberately left '' — never returned by the server,
+            // see the header comment above.
+          });
+          if (slot === 'seasonal' && restored.season) merged.season = restored.season;
+          state.products[slot] = merged;
+        });
+      }
+      if (Array.isArray(profile.schedule) && profile.schedule.length === 7) {
+        state.schedule = profile.schedule;
+      }
+      if (typeof profile.vision === 'string') state.vision = profile.vision;
+      if (typeof profile.tier === 'string') state.tier = profile.tier;
+      if (profile.paid) state.paid = true;
+      saveState();
+    } catch (err) {
+      // Real network failure — never block login on this; see header note.
+    }
   }
 
   async function handleAuthSubmit(e) {
@@ -1139,6 +1242,18 @@
         } catch (err) {}
         location.href = '/index.html';
         return;
+      }
+      // A LOGIN (never a fresh signup — there is nothing to restore for a
+      // brand-new account) to an INCOMPLETE profile: real, reproducible bug
+      // fixed 2026-07-23 — this used to just call go('setup') with whatever
+      // local state happened to exist, which is blank the moment
+      // localStorage is cleared (iOS is known to do this to installed
+      // home-screen web apps). Everything already saved server-side is
+      // real, right now, in profile:<accountId> — restore it before
+      // resuming so a wiped device never looks like lost progress.
+      if (authMode === 'login') {
+        $('auth-status').textContent = 'Restoring your setup…';
+        await restoreStateFromServer();
       }
       go('setup');
     } else {
@@ -2055,6 +2170,7 @@
     $('auth-form').addEventListener('submit', handleAuthSubmit);
     $('auth-mode-toggle').addEventListener('click', handleAuthModeToggle);
     $('auth-toggle-visibility').addEventListener('click', handleAuthVisibilityToggle);
+    $('auth-password').addEventListener('input', updatePasswordStrength);
     $('auth-back').addEventListener('click', function () { go('intro'); });
 
     $('setup-form').addEventListener('submit', handleSetupSubmit);
