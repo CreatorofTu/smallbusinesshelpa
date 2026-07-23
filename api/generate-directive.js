@@ -15,27 +15,32 @@ const { getSessionFromRequest } = require('./_session');
 // STATED PLAINLY, NOT LEFT AS AN IMPLEMENTATION FOOTNOTE: the flagship
 // causal scenario this engine was built for — deterministically explaining
 // something like "removing the brown sugar cost you 4 customers" from a
-// real version-diff — STILL CANNOT FIRE ON ANY REAL CALL TODAY, but for a
-// narrower reason than before. As of the QR/environment-review build (see
-// api/qr-questions.js + api/submit-review.js), coreProductQrSignal and
-// environmentItems are REAL now — sourced from actual qrcomment:* records
-// customers submit via app/review.html, reshaped by
-// loadQrSignalsFromComments() below (SWAP POINT 2). What is STILL
-// permanently empty: variableDiffLog (no version-history/diff-log write
-// path exists anywhere in this codebase — save-profile.js does a bare
-// overwrite with no history) and coreProducts[].recipe (onboarding.html's
-// own on-screen privacy promise means recipe data is never stored
-// server-side at all). Those two remaining gaps mean a HIGH-confidence,
-// single-cause recipe/price/hours directive still cannot fire on real
-// data — but the confidence-gate's steps 7/8 (the core-product sub-block
-// signal and environment-item commentary-as-diagnostic) now have real
-// inputs to reason over instead of permanently null/empty ones. In plain
-// terms: half the engine's eyes are open now, the other half (the actual
-// version-diff log) is still a separate, unbuilt piece. This isn't just
-// true in comments — CAUSAL_DATA_GAPS below is still returned as a
-// `dataGaps` field on every real response, now naming only the two gaps
-// that remain, so this is visible at runtime to whoever is looking at the
-// API, not only to whoever reads this file.
+// real version-diff — STILL CANNOT FIRE ON ANY REAL CALL TODAY, but only
+// because of the one gap that's left, not two. As of the QR/environment-
+// review build (see api/qr-questions.js + api/submit-review.js),
+// coreProductQrSignal and environmentItems are REAL now — sourced from
+// actual qrcomment:* records customers submit via app/review.html, reshaped
+// by loadQrSignalsFromComments() below (SWAP POINT 2 of 3). As of THIS
+// build, variableDiffLog is REAL too — save-profile.js now writes a real
+// changelog (changelogindex:<accountId> / changelog:<accountId>:
+// <timestamp>:<field> — see that file's own header) every time one of a
+// fixed set of tracked fields actually changes value, and
+// loadVariableDiffLog() below reads the trailing window of it back (SWAP
+// POINT 3 of 3). That means a HIGH-confidence, single-cause directive CAN
+// now fire for real on an hours change, a menu-item (type/toppings/extras)
+// change, or a business-identity change. What is STILL permanently empty:
+// coreProducts[].recipe (onboarding.html's own on-screen privacy promise
+// means recipe data is never stored server-side at all) — this is the one
+// remaining, real, by-design gap, and it's specifically why the "removing
+// the brown sugar" recipe-ingredient example still cannot fire on real
+// data: the recipe's own ingredient list is simply never captured anywhere
+// upstream of this engine, so there is nothing to diff even though the
+// diff-log mechanism itself now exists. In plain terms: the engine's eyes
+// are all the way open now except for one, permanently-closed-by-design,
+// blind spot. This isn't just true in comments — CAUSAL_DATA_GAPS below is
+// still returned as a `dataGaps` field on every real response, now naming
+// only that one remaining gap, so this is visible at runtime to whoever is
+// looking at the API, not only to whoever reads this file.
 //
 // THIRD OUTCOME VARIABLE, ADDED (see the request handler's data-fetch
 // section): waitMinutes — real, customer-tapped wait time between "I just
@@ -58,16 +63,22 @@ const { getSessionFromRequest } = require('./_session');
 //     it does NOT start the GitHub read/write layer itself. Real
 //     environment-items are similarly reshaped in code from qrcomment:*
 //     KV records, not from an actual environment-items/<slug>.json file.
-//   - There is STILL no version-history / diff-log write path anywhere in
-//     this codebase (save-profile.js does a bare overwrite). variableDiffLog
-//     is therefore always empty today — a real, named, still-unbuilt gap,
-//     distinct from the QR/comment gap this build closes. The reasoning
-//     prompt is written to fall through to LOW_NONE honestly when the diff
-//     log is empty and nothing else has moved.
+//   - There IS now a real version-history / diff-log write path:
+//     save-profile.js's own changelog (changelogindex:<accountId> +
+//     changelog:<accountId>:<timestamp>:<field> — see that file's header)
+//     records every real change to a fixed set of tracked fields (setup
+//     identity, product type/temp/toppings/extras, schedule, goal). This
+//     file reads the trailing window of it back for real —
+//     loadVariableDiffLog() below (SWAP POINT 3 of 3) — closing the gap
+//     this comment used to name. The reasoning prompt still falls through
+//     to LOW_NONE honestly whenever the trailing window's diff log
+//     genuinely comes back empty (nothing tracked actually changed) and
+//     nothing else has moved — that's a correct "nothing to explain"
+//     result, not the old permanent gap.
 //   - The QR/environment-item comment system NOW EXISTS (qr-questions.js
 //     serves the question sets, submit-review.js stores answers) and its
 //     data now flows into coreProductQrSignal/environmentItems for real —
-//     see loadQrSignalsFromComments() (SWAP POINT 2). Sentiment
+//     see loadQrSignalsFromComments() (SWAP POINT 2 of 3). Sentiment
 //     classification is NOT part of that build (no tap-a-reaction UI was in
 //     scope) — every environment-item comment's `sentiment` field is
 //     honestly null, never invented from the free text.
@@ -165,7 +176,7 @@ function fenceUserText(raw, tag) {
 }
 
 // ============================================================
-// SWAP POINT 1 of 2 — today this reshapes profile:<accountId> (KV) into
+// SWAP POINT 1 of 3 — today this reshapes profile:<accountId> (KV) into
 // the three-tier business.json / core-products / environment-items shape.
 // Once the real GitHub-repo-per-business layer exists, only this function
 // needs to change to read from git instead — everything downstream (the
@@ -219,7 +230,7 @@ function reshapeProfileToRepoShape(profile) {
 }
 
 // ============================================================
-// SWAP POINT 2 of 2 — reads the real qrcomment:* records submit-review.js
+// SWAP POINT 2 of 3 — reads the real qrcomment:* records submit-review.js
 // writes (see that file's header for the exact key scheme) and reshapes
 // them into the environmentItems / coreProductQrSignal shapes the reasoning
 // prompt already expects (see buildDirectivePrompt's INPUTS section for the
@@ -315,6 +326,97 @@ async function loadQrSignalsFromComments(accountId, trailingDates, profile) {
     : null;
 
   return { environmentItems, coreProductQrSignal };
+}
+
+// ============================================================
+// SWAP POINT 3 of 3 — reads the real changelogindex:<accountId> /
+// changelog:<accountId>:<timestamp>:<field> records save-profile.js now
+// writes (see that file's own header for the exact key scheme and the
+// fixed field set it tracks) and maps them into the exact object shape
+// buildDirectivePrompt()'s own TRACKED-VARIABLE DIFF LOG documentation
+// tells the model to expect: { date, path, field, oldValue, newValue,
+// commitMessage, commitSha }.
+//
+// `path`/`field`/`oldValue`/`newValue` are passed straight through from the
+// stored changelog record. These are today's real, flat field-paths (e.g.
+// "product.toppings", "schedule.Monday.start", "goal.metric") — not the
+// fully idealized "core-products/belgian-waffle.json"-style GitHub path
+// the prompt's own doc uses as its illustrative example — because no real
+// git-diff-per-business layer exists yet (see this file's repeated "reshapes
+// today's KV data in code, does NOT start the GitHub layer itself" note
+// above). Named here rather than invented, same convention as every other
+// _gap_ field elsewhere in this file (e.g. reshapeProfileToRepoShape's own
+// _gap_priceTier/_gap_recipe). Once a real repo-per-business layer exists,
+// only this function needs to change to read real commit diffs instead —
+// everything downstream keeps consuming the same fixed shape.
+//
+// commitMessage is synthesized here (no real git commit exists behind these
+// records) — see changelogCommitMessage() below. commitSha is honestly
+// always null for the same reason: the prompt's own doc marks it
+// "(optional, cite if present)", and it is never present today.
+//
+// JUDGMENT CALL, flagged rather than silently decided: this maps EVERY
+// changelog record in the trailing window, including goal.metric/
+// goal.target changes — even though "goal" isn't one of the three tiers
+// (business.json/core-products/environment-items) buildDirectivePrompt's
+// own world-model section defines, and a goal-target edit is an aspiration
+// setting, not a structural business decision like a recipe/hours/price
+// change. save-profile.js's changelog doesn't distinguish "causally
+// relevant" fields from "everything else tracked" when it writes records,
+// and the task scoping this endpoint's read path didn't call out an
+// exclusion either, so this reads the full trailing window rather than
+// silently filtering goal entries out. In practice the model's own step
+// 3-6 reasoning (candidate set built from business.json/core-products/
+// environment-items paths specifically) should naturally treat a
+// "goal.metric" path as not mapping onto any of its three tiers and weigh
+// it accordingly — but if a goal edit is ever seen distorting a real
+// directive, filtering it out of this function is the fix, not a change to
+// save-profile.js's changelog (which should keep recording goal edits for
+// the founder's own history regardless of what the directive engine reads).
+// ============================================================
+function changelogCommitMessage(entry) {
+  if (entry.path.indexOf('product.') === 0) return `Updated ${entry.field} on the core product.`;
+  if (entry.path.indexOf('setup.') === 0) return `Updated ${entry.field} in the business profile.`;
+  if (entry.path.indexOf('schedule.') === 0) {
+    const day = entry.path.split('.')[1] || '';
+    return `Updated ${day} hours (${entry.field}).`;
+  }
+  if (entry.path.indexOf('goal.') === 0) return `Updated the ${entry.field} goal.`;
+  return `Updated ${entry.field}.`;
+}
+
+async function loadVariableDiffLog(accountId, trailingDates) {
+  const idxKey = `changelogindex:${accountId}`;
+  const recordKeys = await kv.zrange(idxKey, 0, -1).catch(() => []);
+  const keys = Array.isArray(recordKeys) ? recordKeys : [];
+  if (keys.length === 0) return [];
+
+  const records = await Promise.all(keys.map((k) => kv.get(k).catch(() => null)));
+  const trailingSet = new Set(trailingDates);
+  const relevant = records.filter((r) => {
+    if (!r || typeof r.date !== 'string' || !trailingSet.has(r.date)) return false;
+    // Resolved judgment call from this function's own build: a goal edit
+    // (the owner's own aspiration/target) has no real causal mechanism to
+    // move real customers/sales, unlike an hours/menu/price change — it's
+    // the owner's tracking preference, not a business decision. Feeding it
+    // to the model as a candidate cause risks exactly the kind of spurious
+    // attribution the confidence-gate exists to prevent. Excluded here,
+    // not in save-profile.js's own changelog — that write path should keep
+    // recording goal edits for the founder's own real history regardless
+    // of what this reasoning engine reads.
+    if (r.path && r.path.indexOf('goal.') === 0) return false;
+    return true;
+  });
+
+  return relevant.map((r) => ({
+    date: r.date,
+    path: r.path,
+    field: r.field,
+    oldValue: r.oldValue,
+    newValue: r.newValue,
+    commitMessage: changelogCommitMessage(r),
+    commitSha: null,
+  }));
 }
 
 function summarizeWindow(dates, entryByDate, waitByDate) {
@@ -919,18 +1021,24 @@ const DIRECTIVE_OUTPUT_SCHEMA = {
 
 const KEEP_LOGGING_MESSAGE = "Keep logging — nothing here has cleared what's normal for your business yet.";
 
-// Static, honest disclosure of today's REMAINING real data gaps (see the
+// Static, honest disclosure of today's REMAINING real data gap (see the
 // file header banner above) — attached as `dataGaps` to every real
 // (configured) response so this is visible at runtime to whoever is looking
 // at the API, not just to someone reading this source file. As of the
 // QR/environment-review build, coreProductQrSignal and environmentItems are
 // no longer permanently empty (they're real, just legitimately empty for a
 // business with zero QR comments yet — that's normal absence of data, not a
-// standing gap, so they're no longer listed here). These two remain
-// unconditional gaps today; if either ever gets wired up for real, update
-// or remove its line here so this doesn't silently start lying.
+// standing gap, so they were already dropped from this object). As of THIS
+// build, variableDiffLog is ALSO no longer a standing gap — save-profile.js
+// now writes a real changelog and this file reads it back for real (see
+// loadVariableDiffLog(), SWAP POINT 3) — so it's dropped from this object
+// too. recipeData is the one real, permanent, by-design gap that's left:
+// recipe data is never stored server-side at all (onboarding.html's own
+// on-screen privacy promise), so recipe-level causes can never be detected
+// from real data, full stop. Do not remove this line, and do not add a
+// variableDiffLog line back unless the changelog write path itself is ever
+// actually removed.
 const CAUSAL_DATA_GAPS = {
-  variableDiffLog: 'No version-history/diff-log write path exists anywhere in this codebase yet (save-profile.js does a bare overwrite, no history) — always empty.',
   recipeData: "Never stored server-side by design (onboarding.html's own privacy promise: recipe stays between the owner and the ai, never us) — recipe-level causes cannot be detected from real data.",
 };
 
@@ -1196,14 +1304,17 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Still a real, honest, unbuilt gap — named explicitly rather than
-    // invented. See file header for the full explanation. Distinct from the
-    // QR/comment-derived signal below, which is now real.
-    const variableDiffLog = []; // no change-log write path exists yet
-
-    // Real now — reshaped from actual qrcomment:* KV records. See
-    // loadQrSignalsFromComments()'s own header (SWAP POINT 2 above).
-    const { environmentItems, coreProductQrSignal } = await loadQrSignalsFromComments(accountId, trailingDates, profile);
+    // Both real now, fetched in parallel:
+    //   - variableDiffLog: the trailing window of save-profile.js's own
+    //     changelog — see loadVariableDiffLog()'s header (SWAP POINT 3).
+    //   - environmentItems/coreProductQrSignal: reshaped from actual
+    //     qrcomment:* KV records — see loadQrSignalsFromComments()'s header
+    //     (SWAP POINT 2).
+    const [variableDiffLog, qrSignals] = await Promise.all([
+      loadVariableDiffLog(accountId, trailingDates),
+      loadQrSignalsFromComments(accountId, trailingDates, profile),
+    ]);
+    const { environmentItems, coreProductQrSignal } = qrSignals;
 
     // Simple, explicit judgment call (flagged, not silently decided): a
     // business only earns "established" tone once its baseline has seen

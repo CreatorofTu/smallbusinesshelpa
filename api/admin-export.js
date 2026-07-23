@@ -38,9 +38,12 @@ const { safeCompare } = require('./_safe-compare');
 //   3. For each accountId in the resulting master set, pull every durable
 //      per-business key: profile, the logdates index and every logentry it
 //      names, the push subscription, the qrcomment index and every comment
-//      it names, and every waitlog:<id>:<date> key (via a direct kv.keys()
-//      scan — there is no logdates-style index for wait data anywhere in
-//      this codebase, confirmed by grepping every kv.* call site).
+//      it names, the changelog index and every changelog record it names
+//      (save-profile.js's real diff-log — same index+records shape as
+//      qrcomment, added the same session as this endpoint), and every
+//      waitlog:<id>:<date> key (via a direct kv.keys() scan — there is no
+//      logdates-style index for wait data anywhere in this codebase,
+//      confirmed by grepping every kv.* call site).
 //   4. Plus the fixed global keys: pushaccounts (real, but a push-opt-in
 //      subset, never treated as an account index), and the old pre-account
 //      legacy keys (businessProfile, logdates, logentry:<date>,
@@ -58,16 +61,18 @@ const { safeCompare } = require('./_safe-compare');
 // by any of the fixed-key reads, so nothing further needs to filter them
 // out — they're simply never reached.
 //
-// SORTED-SET VALUES — logdates:<accountId>/qrcommentindex:<accountId>/the
-// legacy global logdates are all captured as plain member arrays via
-// `kv.zrange(key, 0, -1)`, matching this codebase's own established
-// convention (see log-summary.js/generate-directive.js/delete-legacy-data.js
-// — none of them ever read scores back either). This is a faithful,
-// restorable capture and not a shortcut: every score this app ever writes
-// is deterministically derivable from the member itself (logdates' score is
-// `Number(date.replace(/-/g,''))`; qrcommentindex's score is the same
-// timestamp already embedded as the qrcomment key's own last segment), so a
-// restore script can always recompute the right score from the member alone.
+// SORTED-SET VALUES — logdates:<accountId>/qrcommentindex:<accountId>/
+// changelogindex:<accountId>/the legacy global logdates are all captured as
+// plain member arrays via `kv.zrange(key, 0, -1)`, matching this codebase's
+// own established convention (see log-summary.js/generate-directive.js/
+// delete-legacy-data.js — none of them ever read scores back either). This
+// is a faithful, restorable capture and not a shortcut: every score this
+// app ever writes is deterministically derivable from the member itself
+// (logdates' score is `Number(date.replace(/-/g,''))`; qrcommentindex's and
+// changelogindex's scores are both the same timestamp already embedded in
+// their own key's second-to-last segment — changelog:<accountId>:
+// <timestamp>:<field> — so a restore script can always recompute the right
+// score from the member alone).
 //
 // BEST-EFFORT, NEVER ALL-OR-NOTHING — every individual kv call is wrapped so
 // one bad/missing/malformed key is skipped (and noted in `_meta.errors`)
@@ -211,6 +216,19 @@ module.exports = async function handler(req, res) {
       const commentKeys = await safeZrange(`qrcommentindex:${accountId}`);
       for (const commentKey of commentKeys) {
         await safeGet(commentKey);
+      }
+
+      // changelog:<accountId>:<timestamp>:<field> records (save-profile.js's
+      // real diff-log, added the same session as generate-directive.js's
+      // variableDiffLog read path) — same index+records shape as
+      // qrcommentindex/qrcomment above, so the same safeZrange-then-safeGet
+      // loop applies unchanged. Real, durable business data (a founder's
+      // own change history) — a genuine loss if it vanished, so it belongs
+      // in this per-account loop exactly like every other real key prefix
+      // here.
+      const changelogKeys = await safeZrange(`changelogindex:${accountId}`);
+      for (const changelogKey of changelogKeys) {
+        await safeGet(changelogKey);
       }
 
       // No logdates-style index exists for wait data anywhere in this

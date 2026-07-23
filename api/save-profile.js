@@ -54,6 +54,29 @@ const PAYMENT_MODES = ['payment-link', 'test-mode'];
 const TIER_VALUES = ['light', 'full'];
 const PAYMENT_AMOUNTS = { light: 20, full: 100 };
 const PAYMENTS_MAX = 20; // sane ceiling — this is a one-time onboarding charge, not a ledger
+
+// CHANGELOG (new, additive). Real change-log write path — previously
+// generate-directive.js's variableDiffLog was permanently `[]` because
+// nothing anywhere recorded a change; this closes that gap. Only the
+// fields the founder named as real business decisions are tracked here:
+// setup identity fields, product.type/temp/toppings/extras (never
+// product.recipe — that field is never read from client input anywhere in
+// this file today, matching onboarding.html's own on-screen privacy
+// promise, and must never be diffed or logged, full stop), the 7-day
+// schedule (per-day open/start/end), and goal.metric/goal.target. Follows
+// this codebase's own established index+record pattern (see
+// submit-review.js's qrcommentindex:<accountId>/qrcomment:<accountId>:
+// <itemKey>:<timestamp>): a changelogindex:<accountId> zset (score =
+// timestamp ms) plus individual changelog:<accountId>:<timestamp>:<field>
+// records — the trailing :<field> slug is needed (unlike qrcomment's
+// itemKey-based key) because more than one field can change in the same
+// request and would otherwise collide on the exact same millisecond.
+// Capped the same way this file already caps other lists (PAYMENTS_MAX
+// above) — a sane ceiling, oldest trimmed first, so this can never grow
+// unbounded even for a business that edits constantly. At small-business
+// scale (a handful of real edits a week, if that) 500 entries is years of
+// history, not a tight limit.
+const CHANGELOG_MAX = 500;
 // Inventory item IDs and sticker-binding item IDs are stored inside KV keys
 // elsewhere in this app (KV keys use ':' as a segment delimiter, e.g.
 // profile:<accountId>) — restrict to a safe charset so a ':' or other
@@ -145,6 +168,45 @@ function sanitizeGoal(raw) {
   const target = Number(raw.target);
   if (!metric || !Number.isFinite(target) || target < 0 || target > GOAL_TARGET_MAX) return null;
   return { metric: metric, target: target, setAt: new Date().toISOString() };
+}
+
+// ---- changelog helpers ----
+
+// Turns a dotted path like "schedule.Monday.start" into a safe KV-key
+// segment ("schedule-monday-start") — same charset-restriction instinct as
+// ID_RE above, applied here to a path we build ourselves (not client input)
+// purely so the resulting key is predictable and never contains a ':' that
+// could confuse downstream key-parsing.
+function slugifyPath(path) {
+  return String(path).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function scheduleByDay(schedule) {
+  const map = {};
+  if (Array.isArray(schedule)) {
+    schedule.forEach(function (row) {
+      if (row && row.day) map[row.day] = row;
+    });
+  }
+  return map;
+}
+
+// Best-effort trim, oldest first — mirrors PAYMENTS_MAX's "keep only the
+// newest N" behavior but for a zset-indexed key set instead of a plain
+// array field. Deletes the actual changelog:* records being dropped too
+// (not just their index entries) so nothing orphaned is left behind in KV.
+// Never allowed to fail the request it's called from — a capping failure
+// should never cost a founder their real profile save.
+async function capChangelog(accountId) {
+  const idxKey = `changelogindex:${accountId}`;
+  const count = await kv.zcard(idxKey);
+  if (!count || count <= CHANGELOG_MAX) return;
+  const excess = count - CHANGELOG_MAX;
+  const oldest = await kv.zrange(idxKey, 0, excess - 1);
+  if (Array.isArray(oldest) && oldest.length > 0) {
+    await Promise.all(oldest.map(function (k) { return kv.del(k); }));
+  }
+  await kv.zremrangebyrank(idxKey, 0, excess - 1);
 }
 
 function sanitizePayment(raw) {
@@ -260,6 +322,88 @@ module.exports = async function handler(req, res) {
       if (Number.isFinite(body.stickerCount)) {
         profile.stickerCount = Math.floor(body.stickerCount);
       }
+    }
+
+    // ---------------------------------------------------------------
+    // CHANGELOG — runs AFTER every section above has merged into `profile`,
+    // comparing `existing` (what was on disk before this request) against
+    // `profile` (what's about to be written), for the fixed field set named
+    // in this file's header comment above CHANGELOG_MAX. This deliberately
+    // diffs the net effect of the request rather than tracking which
+    // section(s) the client actually sent — simpler, and correct either
+    // way, since a section that wasn't sent leaves `profile` equal to
+    // `existing` for those fields, which never produces a diff.
+    //
+    // product.recipe is never included here — it is never read from client
+    // input anywhere in this file (see sanitizeProduct above) and this is a
+    // hard privacy line, not a style choice.
+    //
+    // A field moving from undefined to a real value (first-ever save) is
+    // onboarding, not a business decision being revised, and is never
+    // logged — see diffField()'s own "both defined" guard.
+    // ---------------------------------------------------------------
+    const changeEntries = [];
+
+    function diffField(path, field, oldValue, newValue) {
+      if (oldValue === undefined || newValue === undefined) return;
+      if (oldValue === newValue) return;
+      changeEntries.push({ path: path, field: field, oldValue: oldValue, newValue: newValue });
+    }
+
+    const oldSetup = existing.setup || {};
+    const newSetup = profile.setup || {};
+    diffField('setup.businessName', 'businessName', oldSetup.businessName, newSetup.businessName);
+    diffField('setup.ownerName', 'ownerName', oldSetup.ownerName, newSetup.ownerName);
+    diffField('setup.address', 'address', oldSetup.address, newSetup.address);
+    diffField('setup.coreProduct', 'coreProduct', oldSetup.coreProduct, newSetup.coreProduct);
+
+    const oldProduct = existing.product || {};
+    const newProduct = profile.product || {};
+    diffField('product.type', 'type', oldProduct.type, newProduct.type);
+    diffField('product.temp', 'temp', oldProduct.temp, newProduct.temp);
+    diffField('product.toppings', 'toppings', oldProduct.toppings, newProduct.toppings);
+    diffField('product.extras', 'extras', oldProduct.extras, newProduct.extras);
+    // product.recipe: NEVER diffed/logged — see comment block above.
+
+    const oldScheduleByDay = scheduleByDay(existing.schedule);
+    const newScheduleByDay = scheduleByDay(profile.schedule);
+    DAYS.forEach(function (day) {
+      const oldRow = oldScheduleByDay[day];
+      const newRow = newScheduleByDay[day];
+      diffField('schedule.' + day + '.open', 'open', oldRow && oldRow.open, newRow && newRow.open);
+      diffField('schedule.' + day + '.start', 'start', oldRow && oldRow.start, newRow && newRow.start);
+      diffField('schedule.' + day + '.end', 'end', oldRow && oldRow.end, newRow && newRow.end);
+    });
+
+    const oldGoal = existing.goal || {};
+    const newGoal = profile.goal || {};
+    diffField('goal.metric', 'metric', oldGoal.metric, newGoal.metric);
+    diffField('goal.target', 'target', oldGoal.target, newGoal.target);
+
+    if (changeEntries.length > 0) {
+      const changeTimestamp = Date.now(); // server-assigned, never client-supplied
+      const changedAt = new Date(changeTimestamp).toISOString();
+      const changeDate = changedAt.slice(0, 10);
+      const indexKey = `changelogindex:${accountId}`;
+
+      const pipeline = kv.multi();
+      changeEntries.forEach(function (entry) {
+        const recordKey = `changelog:${accountId}:${changeTimestamp}:${slugifyPath(entry.path)}`;
+        pipeline.set(recordKey, {
+          date: changeDate,
+          path: entry.path,
+          field: entry.field,
+          oldValue: entry.oldValue,
+          newValue: entry.newValue,
+          changedAt: changedAt,
+        });
+        pipeline.zadd(indexKey, { score: changeTimestamp, member: recordKey });
+      });
+      await pipeline.exec();
+
+      // Best-effort cap — never let a trim failure block a real profile
+      // save.
+      await capChangelog(accountId).catch(function () {});
     }
 
     profile.updatedAt = new Date().toISOString();
