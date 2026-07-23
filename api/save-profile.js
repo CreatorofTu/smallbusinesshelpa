@@ -59,6 +59,18 @@ const PAYMENTS_MAX = 20; // sane ceiling — this is a one-time onboarding charg
 // allow-listed enum like TIER_VALUES above — no free text accepted.
 const VISION_VALUES = ['retirement', 'franchise'];
 
+// OWNER CONTEXT (new, additive array field). "Never law, just context" —
+// free-form background notes the owner adds about their own business during
+// the pre-baseline period (invited by cron-baseline-context.js's day 1/4/7
+// touchpoints, collected by index.html's ?context=1 screen). Appended (never
+// overwritten) exactly like profile.payments above, capped at
+// OWNER_CONTEXT_MAX entries with the oldest trimmed first. Read back by
+// generate-directive.js's reasoning prompt as color only — never as evidence
+// for a causal claim, the identical reasoning already applied there to
+// excluding goal.metric/goal.target from variableDiffLog.
+const OWNER_CONTEXT_STRING_CAP = 1000;
+const OWNER_CONTEXT_MAX = 20;
+
 // CHANGELOG (new, additive). Real change-log write path — previously
 // generate-directive.js's variableDiffLog was permanently `[]` because
 // nothing anywhere recorded a change; this closes that gap. Only the
@@ -308,6 +320,22 @@ module.exports = async function handler(req, res) {
         }
         profile.paid = true;
         profile.tier = payment.tier;
+      }
+    }
+
+    // ownerContext — one new free-text note per call, appended (never
+    // overwritten). cleanString() both trims and caps length; an empty or
+    // whitespace-only note trims down to '' and is correctly rejected by the
+    // truthiness check below, same rejection style this file already relies
+    // on elsewhere (e.g. sanitizeSetup's individual string fields).
+    if (typeof body.ownerContext === 'string') {
+      const note = cleanString(body.ownerContext, OWNER_CONTEXT_STRING_CAP);
+      if (note) {
+        profile.ownerContext = Array.isArray(profile.ownerContext) ? profile.ownerContext : [];
+        profile.ownerContext.push({ text: note, addedAt: new Date().toISOString() });
+        if (profile.ownerContext.length > OWNER_CONTEXT_MAX) {
+          profile.ownerContext = profile.ownerContext.slice(profile.ownerContext.length - OWNER_CONTEXT_MAX);
+        }
       }
     }
 

@@ -126,6 +126,36 @@
   }
   #read-reveal-hint { margin: 0; }
 
+  /* Close sibling of #read-reveal-overlay above, same full-screen pattern,
+     but this one collects a textarea instead of just tap-to-dismiss text. */
+  #context-collection-overlay {
+    position: fixed; inset: 0; z-index: 100; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 2rem; text-align: center;
+  }
+  #context-collection-heading {
+    font-family: var(--font); font-weight: 700; font-size: 1.3rem; line-height: 1.35;
+    color: var(--ink); max-width: 30ch; margin: 0 0 .75rem;
+    text-wrap: balance;
+  }
+  #context-collection-copy { max-width: 38ch; margin: 0 0 1.5rem; }
+  #context-collection-overlay form { width: 100%; max-width: 420px; text-align: left; }
+  #context-collection-overlay textarea {
+    font-size: 16px;
+    padding: .65em .75em;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    width: 100%;
+    min-height: 7rem;
+    resize: vertical;
+  }
+  #context-collection-overlay textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  #context-collection-overlay .tertiary-link { align-self: center; margin-top: .25rem; }
+  #context-collection-overlay .status { text-align: center; margin-top: .5rem; }
+
   .steps { display: flex; flex-direction: column; gap: 1.25rem; }
   .steps[hidden] { display: none; }
   .step {
@@ -388,6 +418,29 @@
     <p id="read-reveal-text"></p>
     <p class="soft" id="read-reveal-hint">Tap anywhere to continue</p>
   </div>
+
+  <!-- Full-screen context-collection prompt for arriving via a real push
+       notification sent while an account's 7-day baseline is still
+       building (a separate backend agent links to /index.html?context=1)
+       -- built as a close sibling of #read-reveal-overlay above: same
+       full-screen overlay, same [hidden] toggling, checked inside
+       render()'s showLog branch via maybeShowContextCollection(), same
+       history.replaceState-to-clear-the-param, same shown-once guard.
+       Submits { ownerContext } to /api/save-profile -- same endpoint and
+       fetchWithTimeout/credentials convention handleGoalFormSubmit already
+       uses above; the server appends it server-side, nothing read back. -->
+  <div id="context-collection-overlay" hidden>
+    <h2 id="context-collection-heading">Tell your AI more about your business</h2>
+    <p class="soft" id="context-collection-copy">This helps your AI understand your business — it's never a rule, and it never changes what the numbers actually show.</p>
+    <form id="context-form">
+      <label>Anything you want it to know?
+        <textarea id="context-textarea" maxlength="2000" rows="4" placeholder="e.g. we're a weekend farmers-market stand, foot traffic dips hard when it rains"></textarea>
+      </label>
+      <button type="submit">Save</button>
+    </form>
+    <button type="button" class="tertiary-link" id="context-skip-btn">Not now</button>
+    <div class="status" id="context-status"></div>
+  </div>
 </main>
 
 <script>
@@ -435,6 +488,11 @@
     genericInstallCard: document.getElementById('generic-install-card'),
     readRevealOverlay: document.getElementById('read-reveal-overlay'),
     readRevealText: document.getElementById('read-reveal-text'),
+    contextCollectionOverlay: document.getElementById('context-collection-overlay'),
+    contextForm: document.getElementById('context-form'),
+    contextTextarea: document.getElementById('context-textarea'),
+    contextSkipBtn: document.getElementById('context-skip-btn'),
+    contextStatus: document.getElementById('context-status'),
   };
 
   function isIOS() {
@@ -689,6 +747,7 @@
         subscribeToPush().catch(function () {});
       }
       maybeShowReadReveal();
+      maybeShowContextCollection();
     }
   }
 
@@ -792,6 +851,69 @@
         els.readRevealOverlay.hidden = false;
       })
       .catch(function () {});
+  }
+
+  // ---- Push-notification context-collection prompt ----
+  // A separate backend agent sends a few well-timed pushes while an
+  // account's 7-day baseline is still building, inviting the owner to give
+  // their AI more context -- those pushes link to /index.html?context=1.
+  // Close sibling of maybeShowReadReveal() above: same full-screen overlay
+  // pattern, same URL-param check inside render()'s showLog branch, same
+  // history.replaceState-to-clear-the-param, same shown-once guard.
+  let contextCollectionShown = false;
+  function maybeShowContextCollection() {
+    if (contextCollectionShown) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get('context') !== '1') return;
+    contextCollectionShown = true;
+    try { history.replaceState(null, '', location.pathname); } catch (err) {}
+    els.contextCollectionOverlay.hidden = false;
+  }
+
+  async function handleContextSubmit(e) {
+    e.preventDefault();
+    const note = els.contextTextarea.value.trim();
+    if (!note) {
+      // Nothing to send -- just close quietly, same as tapping "Not now".
+      els.contextCollectionOverlay.hidden = true;
+      return;
+    }
+    const submitBtn = els.contextForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    els.contextStatus.textContent = 'Saving…';
+    try {
+      // AUTHORIZATION NOTE: same as every other account-scoped call on this
+      // page -- the server derives the account from the signed session
+      // cookie sent automatically with this same-origin request.
+      const res = await fetchWithTimeout('/api/save-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ ownerContext: note }),
+      });
+      if (res.status === 401) {
+        els.contextStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      if (!res.ok) {
+        els.contextStatus.textContent = 'Could not save that — try again.';
+        return;
+      }
+      els.contextStatus.textContent = 'Thanks — added.';
+      els.contextTextarea.value = '';
+      setTimeout(function () { els.contextCollectionOverlay.hidden = true; }, 1400);
+    } catch (err) {
+      els.contextStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  function handleContextSkip() {
+    els.contextCollectionOverlay.hidden = true;
   }
 
   async function handleGetRead() {
@@ -1012,6 +1134,8 @@
     els.enableBtn.addEventListener('click', handleEnable);
     els.readBtn.addEventListener('click', handleGetRead);
     els.readRevealOverlay.addEventListener('click', function () { els.readRevealOverlay.hidden = true; });
+    els.contextForm.addEventListener('submit', handleContextSubmit);
+    els.contextSkipBtn.addEventListener('click', handleContextSkip);
     els.goalBtn.addEventListener('click', handleGoalClick);
     els.goalForm.addEventListener('submit', handleGoalFormSubmit);
     els.goalChangeBtn.addEventListener('click', handleGoalChange);

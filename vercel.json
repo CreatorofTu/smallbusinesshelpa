@@ -1,7 +1,8 @@
 {
   "crons": [
     { "path": "/api/cron-package-reminder", "schedule": "0 * * * *" },
-    { "path": "/api/cron-anomaly-push", "schedule": "0 15 * * *" }
+    { "path": "/api/cron-anomaly-push", "schedule": "0 15 * * *" },
+    { "path": "/api/cron-baseline-context", "schedule": "0 16 * * *" }
   ],
   "headers": [
     {
