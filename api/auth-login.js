@@ -110,16 +110,24 @@ module.exports = async function handler(req, res) {
     // Best-effort: let a returning owner skip straight back into the app
     // instead of re-running the whole setup wizard if the server already has
     // a completed profile for this account (onboarding.html uses this to
-    // decide whether to redirect to /index.html or to Step 1).
+    // decide whether to redirect to /index.html or to Step 1). Also send back
+    // coreProduct so a login on a fresh device (cleared localStorage) can
+    // restore the personalized log-note placeholder in index.html, which
+    // otherwise silently falls back to generic copy — that placeholder is
+    // read from jaeFirstProduct/jaeBusinessType, which previously were only
+    // ever set at the end of a fresh onboarding run and never rehydrated here.
     let completed = false;
+    let coreProduct = '';
     try {
       const profile = await kv.get(`profile:${account.id}`);
       completed = !!(profile && profile.completed);
+      coreProduct = (profile && profile.setup && profile.setup.coreProduct) || '';
     } catch (err) {
-      // Non-fatal — worst case the user re-lands on Step 1.
+      // Non-fatal — worst case the user re-lands on Step 1, or keeps the
+      // generic placeholder instead of the personalized one.
     }
 
-    res.status(200).json({ ok: true, accountId: account.id, email: account.email, completed: completed });
+    res.status(200).json({ ok: true, accountId: account.id, email: account.email, completed: completed, coreProduct: coreProduct });
   } catch (err) {
     res.status(500).json({ error: 'Something went wrong.' });
   }

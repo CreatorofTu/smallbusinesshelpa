@@ -825,6 +825,15 @@
       if (authMode === 'login' && result.completed) {
         try {
           localStorage.setItem('partnerModeOnboardingComplete', '1');
+          // Restores index.html's personalized log-note placeholder on a
+          // fresh device (cleared localStorage) — without this, a returning
+          // owner logging in from a new phone/browser silently lost the
+          // "changed the Waffles recipe..." hint and fell back to the
+          // generic one, even though nothing about their real account data
+          // was actually lost. See auth-login.js for where coreProduct
+          // comes from.
+          localStorage.setItem('jaeFirstProduct', result.coreProduct || '');
+          localStorage.setItem('jaeBusinessType', 'Restaurant or cafe');
         } catch (err) {}
         location.href = '/index.html';
         return;
