@@ -21,8 +21,17 @@ const MAX_ATTEMPTS = 8;
 const DUMMY_HASH = '$2a$11$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 
 function getClientIp(req) {
+  // Vercel's own edge network appends the real connecting client's IP as the
+  // LAST entry of x-forwarded-for (any earlier entries, including the whole
+  // header itself, can be client-supplied and are not trustworthy). Taking
+  // index [0] let a caller defeat the per-hour attempt cap below by sending
+  // a different spoofed value on every request — same bug already found and
+  // fixed once in submit-review.js/qr-questions.js, propagated here too.
   const xf = req.headers['x-forwarded-for'];
-  if (xf) return String(xf).split(',')[0].trim();
+  if (xf) {
+    const hops = String(xf).split(',').map((s) => s.trim()).filter(Boolean);
+    if (hops.length > 0) return hops[hops.length - 1];
+  }
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 

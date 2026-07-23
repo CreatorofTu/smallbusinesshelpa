@@ -95,7 +95,9 @@ async function registerGeneration(ip) {
 function fenceUserText(raw, tag) {
   const s = typeof raw === 'string' ? raw : '';
   if (!s) return null;
-  const escaped = s.split('</' + tag + '>').join('<' + '/' + tag + '&gt;');
+  // See generate-directive.js's identical helper for why every angle
+  // bracket is escaped, not just this tag's own closing sequence.
+  const escaped = s.split('<').join('&lt;').split('>').join('&gt;');
   return `<${tag}>${escaped}</${tag}>`;
 }
 

@@ -16,8 +16,16 @@ const SIGNUP_WINDOW_SECONDS = 60 * 60; // 1 hour
 const SIGNUP_MAX_ATTEMPTS = 10;
 
 function getClientIp(req) {
+  // Same spoofable-first-hop bug already found and fixed once in
+  // submit-review.js/qr-questions.js/auth-login.js — the LAST hop of
+  // x-forwarded-for is the one Vercel's edge actually assigns; index [0] is
+  // client-suppliable and lets a caller rotate a fake IP per request to
+  // defeat the signup-spam throttle below.
   const xf = req.headers['x-forwarded-for'];
-  if (xf) return String(xf).split(',')[0].trim();
+  if (xf) {
+    const hops = String(xf).split(',').map((s) => s.trim()).filter(Boolean);
+    if (hops.length > 0) return hops[hops.length - 1];
+  }
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
