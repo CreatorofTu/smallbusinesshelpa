@@ -461,13 +461,86 @@
         <label>4. Any other significant items that could've been here? Matcha tea? (Optional)
           <input type="text" id="product-extras">
         </label>
-        <label>5. The most important part: define the recipe, ingredients only right now. This one is saved to your account so your ai can catch it when a recipe change moves your numbers — it's locked with encryption before it's stored, so no person can read it. Not us, not staff, nobody. It's only ever unlocked for a moment, by the system, to work on your own reads — never shown to anyone, never shared, never sold. We assume you have best food practices, so we won't ask anything else past that.
+        <label>5. The most important part: define the recipe, ingredients only right now. Every recipe you save here — this one, and a secondary or seasonal product's if you add one on the next screens — is saved to your account so your ai can catch it when a recipe change moves your numbers, and each one is locked with encryption before it's stored, so no person can read it. Not us, not staff, nobody. It's only ever unlocked for a moment, by the system, to work on your own reads — never shown to anyone, never shared, never sold. We assume you have best food practices, so we won't ask anything else past that.
           <textarea id="product-recipe" placeholder="One ingredient per line" required></textarea>
         </label>
         <button type="submit">Continue</button>
       </form>
       <div class="status" id="product-status"></div>
       <button type="button" class="tertiary-link" id="product-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 3b: Secondary product (optional) ============ -->
+  <section class="screen" id="screen-product2" hidden>
+    <div class="card">
+      <div class="ob-progress">Step 3 of 3</div>
+      <h1>Anything usually sold alongside it?</h1>
+      <p class="soft">A secondary product that usually accompanies your main one in the shop — a coffee, a drink, a matcha tea. It counts as part of your normal baseline, same as your main product. Optional — skip it if there isn't one.</p>
+      <form id="product2-form">
+        <label>1. What is it?
+          <input type="text" id="product2-type" placeholder="Coffee, a drink, matcha tea?">
+        </label>
+        <div class="field-label">2. Is it served hot or cold?
+          <div class="ob-toggle" id="product2-temp">
+            <button type="button" class="ob-toggle-opt" data-opt="Hot">Hot</button>
+            <button type="button" class="ob-toggle-opt" data-opt="Cold">Cold</button>
+          </div>
+        </div>
+        <label>3. What toppings/sides usually come with it? (Optional)
+          <input type="text" id="product2-toppings">
+        </label>
+        <label>4. Any other significant items that could've been here instead? (Optional)
+          <input type="text" id="product2-extras">
+        </label>
+        <label>5. Its recipe, ingredients only. (Optional) Locked with the same encryption as your main recipe before it's stored — no person can read it, it's only ever unlocked for a moment, by the system, to work on your own reads.
+          <textarea id="product2-recipe" placeholder="One ingredient per line"></textarea>
+        </label>
+        <button type="submit">Save and continue</button>
+      </form>
+      <div class="status" id="product2-status"></div>
+      <button type="button" class="tertiary-link" id="product2-skip">Skip — no secondary product</button>
+      <button type="button" class="tertiary-link" id="product2-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 3c: Seasonal product (optional) ============ -->
+  <section class="screen" id="screen-product3" hidden>
+    <div class="card">
+      <div class="ob-progress">Step 3 of 3</div>
+      <h1>Any seasonal product?</h1>
+      <p class="soft">Something that's popular during one part of the year — a summer drink, a holiday special. Optional — skip it if there isn't one.</p>
+      <form id="product3-form">
+        <label>1. What is it?
+          <input type="text" id="product3-type" placeholder="A summer lemonade? A holiday special?">
+        </label>
+        <label>2. Which season does it sell in?
+          <select id="product3-season">
+            <option value="">Pick a season</option>
+            <option value="winter">Winter (Dec&ndash;Feb)</option>
+            <option value="spring">Spring (Mar&ndash;May)</option>
+            <option value="summer">Summer (Jun&ndash;Aug)</option>
+            <option value="fall">Fall (Sep&ndash;Nov)</option>
+          </select>
+        </label>
+        <div class="field-label">3. Is it served hot or cold?
+          <div class="ob-toggle" id="product3-temp">
+            <button type="button" class="ob-toggle-opt" data-opt="Hot">Hot</button>
+            <button type="button" class="ob-toggle-opt" data-opt="Cold">Cold</button>
+          </div>
+        </div>
+        <label>4. What toppings/sides usually come with it? (Optional)
+          <input type="text" id="product3-toppings">
+        </label>
+        <label>5. Its recipe, ingredients only. (Optional) Locked with the same encryption as your main recipe before it's stored — no person can read it, it's only ever unlocked for a moment, by the system, to work on your own reads.
+          <textarea id="product3-recipe" placeholder="One ingredient per line"></textarea>
+        </label>
+        <p class="soft">Honest note on what this does: your daily numbers are one combined total — we don't track each product's own sales — so this never changes or adjusts any baseline math. It gives your ai context: when a swing in your numbers lines up with this season starting or ending, it can weigh that as a likely seasonal explanation instead of an unexplained change.</p>
+        <button type="submit">Save and continue</button>
+      </form>
+      <div class="status" id="product3-status"></div>
+      <button type="button" class="tertiary-link" id="product3-skip">Skip — no seasonal product</button>
+      <button type="button" class="tertiary-link" id="product3-back">Back</button>
     </div>
   </section>
 
@@ -533,23 +606,40 @@
   // overwrite that business's profile.
   //
   // PRIVACY — REVERSED 2026-07-23, deliberately, by the founder: the recipe
-  // (state.product.recipe) used to be EXCLUDED from every payload below,
-  // keeping the old on-screen promise ("stays between you and the ai,
-  // NEVER US") true, and a hard "never add the recipe to any server
-  // payload" rule stood here. The founder reversed it in his own words —
-  // "then switch it, its their ai manager if its needed to work some lines
-  // need to be crossed but acknowledge and protected and showed proof of
-  // protection" — because the old exclusion was the only reason the
-  // flagship recipe-level directive could never fire on real data. The
-  // recipe now ships in completeOnboarding()'s product payload; the
-  // on-screen copy (screen-product's question 5) and privacy.html were
-  // rewritten in the same pass, and server-side the text is encrypted at
-  // rest before it ever touches storage (save-profile.js +
+  // (then state.product.recipe — see the THREE-SLOT note below) used to be
+  // EXCLUDED from every payload below, keeping the old on-screen promise
+  // ("stays between you and the ai, NEVER US") true, and a hard "never add
+  // the recipe to any server payload" rule stood here. The founder reversed
+  // it in his own words — "then switch it, its their ai manager if its
+  // needed to work some lines need to be crossed but acknowledge and
+  // protected and showed proof of protection" — because the old exclusion
+  // was the only reason the flagship recipe-level directive could never
+  // fire on real data. Recipes now ship in completeOnboarding()'s products
+  // payload; the on-screen copy (each product screen's recipe question) and
+  // privacy.html were rewritten in the same pass, and server-side the text
+  // is encrypted at rest before it ever touches storage (save-profile.js +
   // api/_recipe-crypto.js — AES-256-GCM, key server-side only, never
   // returned in any response, changelog stores an encrypted line-diff
-  // only). This client never does any crypto itself and never reads the
-  // recipe back from the server — it only sends it, once, over the same
+  // only). This client never does any crypto itself and never reads any
+  // recipe back from the server — it only sends them, once, over the same
   // authenticated call every other field already uses.
+  //
+  // THREE-SLOT PRODUCTS (2026-07-23, later the same day): state.product
+  // (singular) became state.products = { main, secondary, seasonal }.
+  // MAIN is the old single product unchanged — "the actual core, what the
+  // shop is known for," required. SECONDARY (optional) is something usually
+  // sold alongside it — a coffee, a drink, a matcha tea — part of the
+  // normal baseline exactly like main. SEASONAL (optional) carries a
+  // season (winter/spring/summer/fall, a fixed enum the server re-validates)
+  // and exists as reasoning CONTEXT for the ai around expected seasonal
+  // swings — NOT a mathematical adjustment: daily sales are logged as one
+  // combined number with no per-product breakdown, so nothing is ever
+  // subtracted from or added to any baseline figure, and the on-screen copy
+  // on the seasonal screen says so plainly. secondary/seasonal stay null
+  // until the owner actually fills them in, and completeOnboarding() only
+  // sends the slots that were filled. Every slot's recipe gets the exact
+  // same encrypt-at-rest treatment described above — three separate
+  // recipes, one bar.
   // ============================================================
 
   const API = {
@@ -616,9 +706,16 @@
       return this.post('/api/save-profile', { schedule: state.schedule });
     },
     completeOnboarding() {
-      // Recipe included since 2026-07-23 (founder-directed reversal — see
+      // Recipes included since 2026-07-23 (founder-directed reversal — see
       // the seam-wide PRIVACY note above for the full why). The server
-      // encrypts it before storing; this client just sends the text once.
+      // encrypts each one before storing; this client just sends the text
+      // once. Three-slot products payload (see the THREE-SLOT note above):
+      // main always ships; secondary/seasonal ship only when the owner
+      // actually filled them in (slotFilled — a slot the owner skipped is
+      // `undefined`, which JSON.stringify drops from the payload entirely).
+      const main = state.products.main;
+      const secondary = slotFilled(state.products.secondary) ? state.products.secondary : null;
+      const seasonal = slotFilled(state.products.seasonal) ? state.products.seasonal : null;
       return this.post('/api/save-profile', {
         setup: {
           businessName: state.setup.businessName,
@@ -627,12 +724,33 @@
           coreProduct: state.setup.coreProduct,
         },
         deliveryAddress: state.deliveryAddress,
-        product: {
-          type: state.product.type,
-          temp: state.product.temp,
-          toppings: state.product.toppings,
-          extras: state.product.extras,
-          recipe: state.product.recipe,
+        products: {
+          main: {
+            type: main.type,
+            temp: main.temp,
+            toppings: main.toppings,
+            extras: main.extras,
+            recipe: main.recipe,
+          },
+          secondary: secondary
+            ? {
+                type: secondary.type,
+                temp: secondary.temp,
+                toppings: secondary.toppings,
+                extras: secondary.extras,
+                recipe: secondary.recipe,
+              }
+            : undefined,
+          seasonal: seasonal
+            ? {
+                type: seasonal.type,
+                temp: seasonal.temp,
+                toppings: seasonal.toppings,
+                extras: seasonal.extras,
+                recipe: seasonal.recipe,
+                season: seasonal.season,
+              }
+            : undefined,
         },
         schedule: state.schedule,
         stickerCount: Object.keys(state.bindings).length,
@@ -771,6 +889,17 @@
     return { id: genItemId(), name: '', count: '' };
   }
 
+  // ---- three-slot product helpers (see the THREE-SLOT note above) ----
+  function emptyProductSlot() {
+    return { type: '', temp: '', toppings: '', extras: '', recipe: '' };
+  }
+  // "Filled in" = has a real type — the one field every slot screen
+  // requires before saving. Guards completeOnboarding() against sending a
+  // half-touched slot (e.g. a temp tap followed by Skip).
+  function slotFilled(slot) {
+    return !!(slot && typeof slot.type === 'string' && slot.type.trim());
+  }
+
   function defaultState() {
     return {
       screen: 'intro',
@@ -786,7 +915,14 @@
       inventoryConfirmedOnce: false,
       bindings: {},            // sticker number -> { id, name } (id = inventory row's stable id)
       currentSticker: null,
-      product: { type: '', temp: '', toppings: '', extras: '', recipe: '' },
+      // Three-slot products (2026-07-23; see the THREE-SLOT note above).
+      // main is the old singular `product` field relocated; secondary/
+      // seasonal stay null until the owner fills their optional screens in.
+      products: {
+        main: emptyProductSlot(),
+        secondary: null,
+        seasonal: null,
+      },
       schedule: DAYS.map(function (day) {
         return { day: day, open: true, start: '09:00', end: '17:00' };
       }),
@@ -807,6 +943,19 @@
       }
       if (!Array.isArray(base.inventory) || base.inventory.length === 0) base.inventory = [newInventoryRow()];
       if (!Array.isArray(base.schedule) || base.schedule.length !== 7) base.schedule = defaultState().schedule;
+      // Migrate pre-3-slot saved state: the old shape stored a single
+      // state.product — it becomes products.main unchanged (the base merge
+      // loop above drops unknown keys, so without this an in-progress
+      // onboarding from before the change would silently lose its typed
+      // product/recipe on reload).
+      if (saved && saved.product && typeof saved.product === 'object' && !saved.products) {
+        base.products = defaultState().products;
+        base.products.main = Object.assign(emptyProductSlot(), saved.product);
+      }
+      // Shape guard, same posture as the inventory/schedule guards above.
+      if (!base.products || typeof base.products !== 'object' || !base.products.main || typeof base.products.main !== 'object') {
+        base.products = defaultState().products;
+      }
       // Give any row saved before ids existed a stable id.
       base.inventory.forEach(function (row) {
         if (row && !row.id) row.id = genItemId();
@@ -849,11 +998,11 @@
 
   const $ = function (id) { return document.getElementById(id); };
 
-  const SCREENS = ['intro', 'auth', 'setup', 'package', 'manual', 'inventory', 'stickers', 'product', 'schedule', 'done'];
+  const SCREENS = ['intro', 'auth', 'setup', 'package', 'manual', 'inventory', 'stickers', 'product', 'product2', 'product3', 'schedule', 'done'];
   // Everything from Step 1 onward requires an account. A direct deep link
   // (or any other way of landing on one of these screens without having
   // gone through auth) gets bounced back to screen-auth — see render().
-  const POST_AUTH_SCREENS = ['setup', 'package', 'manual', 'inventory', 'stickers', 'product', 'schedule', 'done'];
+  const POST_AUTH_SCREENS = ['setup', 'package', 'manual', 'inventory', 'stickers', 'product', 'product2', 'product3', 'schedule', 'done'];
 
   function go(screen) {
     state.screen = screen;
@@ -1413,11 +1562,11 @@
     setCurrentSticker($('sticker-number').value);
   }
 
-  // ---------- Screen 3: product ----------
+  // ---------- Screen 3: MAIN product (the actual core) ----------
   function fillProductScreen() {
     const core = state.setup.coreProduct || 'your core product';
     $('product-heading').textContent =
-      'Time to tell the ai what makes you special — you mentioned ' + core + ' as your core product.';
+      'Time to tell the ai what makes you special — you mentioned ' + core + ' as your main product, the thing you’re known for.';
     // Placeholder is relevant to what they actually typed earlier ("What
     // type of waffle?" instead of a generic example list) -- pure
     // client-side string interpolation off state.setup.coreProduct, no API
@@ -1426,21 +1575,21 @@
     $('product-type').placeholder = state.setup.coreProduct
       ? 'What type of ' + state.setup.coreProduct + '?'
       : 'Eggo, Belgian, Brioche, Buttermilk?';
-    $('product-type').value = state.product.type;
-    $('product-toppings').value = state.product.toppings;
-    $('product-extras').value = state.product.extras;
-    $('product-recipe').value = state.product.recipe;
+    $('product-type').value = state.products.main.type;
+    $('product-toppings').value = state.products.main.toppings;
+    $('product-extras').value = state.products.main.extras;
+    $('product-recipe').value = state.products.main.recipe;
     renderTempToggle();
   }
 
   function renderTempToggle() {
     $('product-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
-      btn.classList.toggle('selected', btn.getAttribute('data-opt') === state.product.temp);
+      btn.classList.toggle('selected', btn.getAttribute('data-opt') === state.products.main.temp);
     });
   }
 
   function handleTempTap(e) {
-    state.product.temp = e.currentTarget.getAttribute('data-opt');
+    state.products.main.temp = e.currentTarget.getAttribute('data-opt');
     saveState();
     $('product-status').textContent = '';
     renderTempToggle();
@@ -1448,17 +1597,145 @@
 
   function handleProductSubmit(e) {
     e.preventDefault();
-    if (!state.product.temp) {
+    if (!state.products.main.temp) {
       $('product-status').textContent = 'Tap Hot or Cold first.';
       return;
     }
-    state.product.type = $('product-type').value.trim();
-    state.product.toppings = $('product-toppings').value.trim();
-    state.product.extras = $('product-extras').value.trim();
+    state.products.main.type = $('product-type').value.trim();
+    state.products.main.toppings = $('product-toppings').value.trim();
+    state.products.main.extras = $('product-extras').value.trim();
     // Recipe: kept in local state here, then sent to the server ONCE, at
     // completeOnboarding() — since 2026-07-23 (founder-directed reversal;
     // see the seam-wide PRIVACY note above). It used to be local-only.
-    state.product.recipe = $('product-recipe').value;
+    state.products.main.recipe = $('product-recipe').value;
+    saveState();
+    go('product2');
+  }
+
+  // ---------- Screen 3b: SECONDARY product (optional) ----------
+  // Drafts write straight into state.products.secondary (created on first
+  // touch) so a temp tap survives a reload, but completeOnboarding() only
+  // sends the slot when slotFilled() — a half-touched slot never ships.
+  function ensureSecondary() {
+    if (!state.products.secondary) state.products.secondary = emptyProductSlot();
+    return state.products.secondary;
+  }
+
+  function fillProduct2Screen() {
+    const slot = state.products.secondary || emptyProductSlot();
+    $('product2-type').value = slot.type;
+    $('product2-toppings').value = slot.toppings;
+    $('product2-extras').value = slot.extras;
+    $('product2-recipe').value = slot.recipe;
+    renderTemp2Toggle();
+  }
+
+  function renderTemp2Toggle() {
+    const temp = state.products.secondary ? state.products.secondary.temp : '';
+    $('product2-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
+      btn.classList.toggle('selected', btn.getAttribute('data-opt') === temp);
+    });
+  }
+
+  function handleTemp2Tap(e) {
+    ensureSecondary().temp = e.currentTarget.getAttribute('data-opt');
+    saveState();
+    $('product2-status').textContent = '';
+    renderTemp2Toggle();
+  }
+
+  function handleProduct2Submit(e) {
+    e.preventDefault();
+    const type = $('product2-type').value.trim();
+    if (!type) {
+      $('product2-status').textContent = 'Type what it is, or tap Skip below.';
+      return;
+    }
+    if (!(state.products.secondary && state.products.secondary.temp)) {
+      $('product2-status').textContent = 'Tap Hot or Cold first.';
+      return;
+    }
+    const slot = ensureSecondary();
+    slot.type = type;
+    slot.toppings = $('product2-toppings').value.trim();
+    slot.extras = $('product2-extras').value.trim();
+    slot.recipe = $('product2-recipe').value;
+    saveState();
+    go('product3');
+  }
+
+  function handleProduct2Skip() {
+    // Skip means "no secondary product" — clears any half-typed draft so a
+    // partially-filled slot can't linger and ship later by accident.
+    state.products.secondary = null;
+    saveState();
+    go('product3');
+  }
+
+  // ---------- Screen 3c: SEASONAL product (optional) ----------
+  // Same draft/skip pattern as the secondary screen. The extra `season`
+  // field is a fixed four-value enum (the <select>'s own options) that the
+  // server re-validates against its SEASON_VALUES allow-list — see the
+  // THREE-SLOT note above for the honest scope of what seasonal does
+  // (reasoning context only, never baseline math).
+  function ensureSeasonal() {
+    if (!state.products.seasonal) state.products.seasonal = Object.assign(emptyProductSlot(), { season: '' });
+    return state.products.seasonal;
+  }
+
+  function fillProduct3Screen() {
+    const slot = state.products.seasonal || Object.assign(emptyProductSlot(), { season: '' });
+    $('product3-type').value = slot.type;
+    $('product3-season').value = slot.season || '';
+    $('product3-toppings').value = slot.toppings;
+    $('product3-recipe').value = slot.recipe;
+    renderTemp3Toggle();
+  }
+
+  function renderTemp3Toggle() {
+    const temp = state.products.seasonal ? state.products.seasonal.temp : '';
+    $('product3-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
+      btn.classList.toggle('selected', btn.getAttribute('data-opt') === temp);
+    });
+  }
+
+  function handleTemp3Tap(e) {
+    ensureSeasonal().temp = e.currentTarget.getAttribute('data-opt');
+    saveState();
+    $('product3-status').textContent = '';
+    renderTemp3Toggle();
+  }
+
+  function handleProduct3Submit(e) {
+    e.preventDefault();
+    const type = $('product3-type').value.trim();
+    if (!type) {
+      $('product3-status').textContent = 'Type what it is, or tap Skip below.';
+      return;
+    }
+    const season = $('product3-season').value;
+    if (['winter', 'spring', 'summer', 'fall'].indexOf(season) === -1) {
+      $('product3-season').focus();
+      $('product3-status').textContent = 'Pick which season it sells in.';
+      return;
+    }
+    if (!(state.products.seasonal && state.products.seasonal.temp)) {
+      $('product3-status').textContent = 'Tap Hot or Cold first.';
+      return;
+    }
+    const slot = ensureSeasonal();
+    slot.type = type;
+    slot.season = season;
+    slot.toppings = $('product3-toppings').value.trim();
+    slot.recipe = $('product3-recipe').value;
+    saveState();
+    go('schedule');
+  }
+
+  function handleProduct3Skip() {
+    // Skip means "no seasonal product" — clears any half-typed draft, same
+    // reasoning as the secondary screen's skip.
+    state.products.seasonal = null;
     saveState();
     go('schedule');
   }
@@ -1553,6 +1830,8 @@
     if (state.screen === 'inventory') renderInventoryRows();
     if (state.screen === 'stickers') renderStickerScreen();
     if (state.screen === 'product') fillProductScreen();
+    if (state.screen === 'product2') fillProduct2Screen();
+    if (state.screen === 'product3') fillProduct3Screen();
     if (state.screen === 'schedule') renderScheduleScreen();
     if (state.screen === 'done') fillDoneScreen();
   }
@@ -1693,8 +1972,22 @@
     });
     $('product-back').addEventListener('click', function () { go('stickers'); });
 
+    $('product2-form').addEventListener('submit', handleProduct2Submit);
+    $('product2-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
+      btn.addEventListener('click', handleTemp2Tap);
+    });
+    $('product2-skip').addEventListener('click', handleProduct2Skip);
+    $('product2-back').addEventListener('click', function () { go('product'); });
+
+    $('product3-form').addEventListener('submit', handleProduct3Submit);
+    $('product3-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
+      btn.addEventListener('click', handleTemp3Tap);
+    });
+    $('product3-skip').addEventListener('click', handleProduct3Skip);
+    $('product3-back').addEventListener('click', function () { go('product2'); });
+
     $('schedule-continue').addEventListener('click', handleScheduleContinue);
-    $('schedule-back').addEventListener('click', function () { go('product'); });
+    $('schedule-back').addEventListener('click', function () { go('product3'); });
 
     $('done-open-app').addEventListener('click', function () { location.href = '/index.html'; });
     $('done-back').addEventListener('click', function () { go('schedule'); });

@@ -40,10 +40,14 @@ const { decryptRecipeText } = require('./_recipe-crypto');
 // into buildDirectivePrompt's system prompt; responseBody is built from the
 // model's verdict, never from ctx/coreProducts). Recipe changelog records
 // carry an encrypted line-diff, decrypted the same in-memory-only way in
-// loadVariableDiffLog(). The one gap still left — named honestly at runtime
-// via CAUSAL_DATA_GAPS/`dataGaps` below — is price: no price/priceTier
-// field is tracked anywhere in profile:<accountId> yet (see _gap_priceTier
-// in reshapeProfileToRepoShape).
+// loadVariableDiffLog(). The gaps still left — named honestly at runtime
+// via CAUSAL_DATA_GAPS/`dataGaps` below — are price (no price/priceTier
+// field is tracked anywhere in profile:<accountId> yet, see _gap_priceTier
+// in reshapeProfileToRepoShape) and per-product sales granularity (one
+// combined daily {customers, sales} pair for the whole business — which is
+// why the 2026-07-23 three-slot products build's seasonal handling is
+// interpretive prompt context, never a mathematical baseline adjustment;
+// see the SEASONAL CONTEXT section of the prompt).
 //
 // THIRD OUTCOME VARIABLE, ADDED (see the request handler's data-fetch
 // section): waitMinutes — real, customer-tapped wait time between "I just
@@ -178,38 +182,99 @@ function fenceUserText(raw, tag) {
   return `<${tag}>${escaped}</${tag}>`;
 }
 
+// ---- Season model (2026-07-23, three-slot products build) ----
+// Quarterly mapping, resolved from the founder's own "the season changes
+// every three months" / summer-roughly-June-August framing (his hedge
+// between August and September resolved to a clean quarterly split):
+// winter = Dec-Feb, spring = Mar-May, summer = Jun-Aug, fall = Sep-Nov.
+// save-profile.js's SEASON_VALUES enum is the write-side counterpart of
+// this same mapping — keep the two in sync.
+const SEASON_VALUES = ['winter', 'spring', 'summer', 'fall'];
+
+// getCurrentSeason(dateStr) -> 'winter'|'spring'|'summer'|'fall'.
+// Takes the same caller-supplied, already-validated "today" string the rest
+// of this file's calendar math is anchored to (see computeDirectiveForAccount
+// — this function must NEVER be fed an ambient Date.now()/new Date(), per
+// the same never-touches-the-server-clock convention parseDateUTC/
+// windowDates already follow for calendar-day logic).
+function getCurrentSeason(dateStr) {
+  const month = new Date(parseDateUTC(dateStr)).getUTCMonth(); // 0-11
+  if (month === 11 || month === 0 || month === 1) return 'winter';
+  if (month >= 2 && month <= 4) return 'spring';
+  if (month >= 5 && month <= 7) return 'summer';
+  return 'fall';
+}
+
 // ============================================================
 // SWAP POINT 1 of 3 — today this reshapes profile:<accountId> (KV) into
 // the three-tier business.json / core-products / environment-items shape.
 // Once the real GitHub-repo-per-business layer exists, only this function
 // needs to change to read from git instead — everything downstream (the
 // prompt builder, the confidence-tier reasoning) consumes the same shape.
+//
+// THREE-SLOT MODEL (2026-07-23): coreProducts used to be built from the
+// single profile.product and always had exactly one entry — an array shape
+// this file chose from day one, now finally carrying more than one entry.
+// profile.products = { main, secondary, seasonal } (save-profile.js, see
+// that file's header for the founder's slot definitions) becomes up to
+// three coreProducts entries, each tagged with its `role`; the seasonal
+// entry additionally carries its allow-listed `season`. A legacy profile
+// still holding the old singular profile.product reads as the main slot —
+// same normalization save-profile.js applies on its write side.
 // ============================================================
 function reshapeProfileToRepoShape(profile) {
   const setup = (profile && profile.setup) || {};
   const schedule = Array.isArray(profile && profile.schedule) ? profile.schedule : null;
-  const product = (profile && profile.product) || null;
 
-  // Recipe — REAL since 2026-07-23 (see the file header for the founder's
-  // reversal of the old never-server-side promise). Stored encrypted at
-  // rest ({ iv, tag, data } via api/_recipe-crypto.js); decrypted here IN
-  // MEMORY ONLY. The resulting plaintext exists solely to feed
-  // buildDirectivePrompt() — this whole coreProducts shape never appears in
-  // any HTTP response (responseBody is assembled from the model's verdict
-  // + dataGaps, never from ctx), and nothing may ever change that without
-  // re-reading the protection contract in _recipe-crypto.js's header.
-  // decryptRecipeText returns '' for an absent recipe (a normal state) and
-  // for a blob that fails its auth-tag check — never garbage. Each
-  // ingredient line is fenced like every other piece of owner-typed free
-  // text in this file (see fenceUserText above and the prompt's section 4).
-  const recipePlain = product && product.recipe ? decryptRecipeText(product.recipe) : '';
-  const recipeIngredients = recipePlain
-    ? recipePlain
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((line) => fenceUserText(line, 'core_product_recipe_ingredient'))
-    : null;
+  // Legacy-normalized slots: pre-3-slot profiles stored a single
+  // profile.product — treated as the main slot.
+  const storedProducts =
+    profile && profile.products && typeof profile.products === 'object' && !Array.isArray(profile.products)
+      ? profile.products
+      : profile && profile.product && typeof profile.product === 'object'
+        ? { main: profile.product }
+        : {};
+
+  // Per-slot reshape. Recipe — REAL since 2026-07-23 (see the file header
+  // for the founder's reversal of the old never-server-side promise).
+  // Stored encrypted at rest ({ iv, tag, data } via api/_recipe-crypto.js);
+  // decrypted here IN MEMORY ONLY, independently per slot. The resulting
+  // plaintext exists solely to feed buildDirectivePrompt() — this whole
+  // coreProducts shape never appears in any HTTP response (responseBody is
+  // assembled from the model's verdict + dataGaps, never from ctx), and
+  // nothing may ever change that without re-reading the protection
+  // contract in _recipe-crypto.js's header. decryptRecipeText returns ''
+  // for an absent recipe (a normal state) and for a blob that fails its
+  // auth-tag check — never garbage. Each ingredient line is fenced like
+  // every other piece of owner-typed free text in this file (see
+  // fenceUserText above and the prompt's section 4).
+  function reshapeSlot(role, slot, preferredName) {
+    if (!slot || typeof slot !== 'object') return null;
+    const recipePlain = slot.recipe ? decryptRecipeText(slot.recipe) : '';
+    const recipeIngredients = recipePlain
+      ? recipePlain
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((line) => fenceUserText(line, 'core_product_recipe_ingredient'))
+      : null;
+    const entry = {
+      role: role, // 'main' | 'secondary' | 'seasonal' — fixed slot names, never client free text
+      name: fenceUserText(preferredName || slot.type || role + ' product', 'core_product_name'),
+      type: fenceUserText(slot.type, 'core_product_type'),
+      temp: slot.temp || null, // not free text — constrained to 'Hot'/'Cold' by save-profile.js
+      recipe: recipeIngredients ? { ingredients: recipeIngredients } : null,
+      toppings: fenceUserText(slot.toppings, 'core_product_toppings'),
+      extras: fenceUserText(slot.extras, 'core_product_extras'),
+    };
+    if (role === 'seasonal') {
+      // Allow-listed enum, never free text — save-profile.js already
+      // enforces this on write; re-checked here so a hand-edited KV value
+      // can never smuggle arbitrary text into the prompt unfenced.
+      entry.season = SEASON_VALUES.indexOf(slot.season) !== -1 ? slot.season : null;
+    }
+    return entry;
+  }
 
   const business = {
     // Fenced like every other piece of owner-typed free text in this file —
@@ -230,22 +295,16 @@ function reshapeProfileToRepoShape(profile) {
     _gap_priceTier: 'not tracked anywhere in profile:<accountId> yet — business.json spec calls for one, save-profile.js has no field for it',
   };
 
-  const coreProducts = product
-    ? [
-        {
-          name: fenceUserText(setup.coreProduct || product.type || 'core product', 'core_product_name'),
-          type: fenceUserText(product.type, 'core_product_type'),
-          temp: product.temp || null, // not free text — constrained to 'Hot'/'Cold' by save-profile.js
-          // REAL since 2026-07-23 — that founder decision happened (see the
-          // file header and _recipe-crypto.js). Decrypted in memory only,
-          // above; null stays the honest value for a business that hasn't
-          // entered a recipe (or whose blob failed authentication).
-          recipe: recipeIngredients ? { ingredients: recipeIngredients } : null,
-          toppings: fenceUserText(product.toppings, 'core_product_toppings'),
-          extras: fenceUserText(product.extras, 'core_product_extras'),
-        },
-      ]
-    : [];
+  // Up to three entries, main first (it's "the actual core, what the shop
+  // is known for" — the priority framework's tier-1 subject). The main
+  // slot's display name still prefers setup.coreProduct, exactly as the
+  // old single-entry version did; secondary/seasonal name themselves from
+  // their own type.
+  const coreProducts = [
+    reshapeSlot('main', storedProducts.main, setup.coreProduct),
+    reshapeSlot('secondary', storedProducts.secondary, null),
+    reshapeSlot('seasonal', storedProducts.seasonal, null),
+  ].filter(Boolean);
 
   return { business, coreProducts };
 }
@@ -396,6 +455,19 @@ async function loadQrSignalsFromComments(accountId, trailingDates, profile) {
 // the founder's own history regardless of what the directive engine reads).
 // ============================================================
 function changelogCommitMessage(entry) {
+  // Three-slot paths (products.main.* / products.secondary.* /
+  // products.seasonal.*, written by save-profile.js since the 2026-07-23
+  // three-slot build) — named per slot so the model can tell which product
+  // the change belongs to.
+  const slotMatch = /^products\.(main|secondary|seasonal)\./.exec(entry.path);
+  if (slotMatch) {
+    if (entry.field === 'recipe') return `Updated the ${slotMatch[1]} product recipe (ingredient line-diff attached).`;
+    if (entry.field === 'season') return 'Changed which season the seasonal product belongs to.';
+    return `Updated ${entry.field} on the ${slotMatch[1]} product.`;
+  }
+  // Pre-3-slot records — the old singular product.* paths stay in the log
+  // as written; still read, still named honestly as the (then-only) core
+  // product.
   if (entry.path === 'product.recipe') return 'Updated the core product recipe (ingredient line-diff attached).';
   if (entry.path.indexOf('product.') === 0) return `Updated ${entry.field} on the core product.`;
   if (entry.path.indexOf('setup.') === 0) return `Updated ${entry.field} in the business profile.`;
@@ -431,10 +503,14 @@ async function loadVariableDiffLog(accountId, trailingDates) {
   });
 
   return relevant.map((r) => {
-    // product.recipe records (SINCE 2026-07-23 — see the file header's
+    // Recipe records (SINCE 2026-07-23 — see the file header's
     // recipe-reversal note) carry no plaintext oldValue/newValue at all:
     // save-profile.js stores the ingredient line-diff ENCRYPTED
     // (encryptedDiff, plaintext shape { added: [...], removed: [...] }).
+    // Since the three-slot build the live paths are products.main.recipe /
+    // products.secondary.recipe / products.seasonal.recipe; older records
+    // under the original singular product.recipe path get the identical
+    // treatment (one generalized branch, not three copies).
     // Decrypted here in memory only, for the prompt — mapped onto the
     // oldValue/newValue slots as "what left the recipe" / "what entered
     // it", the exact granularity the flagship "removing the brown sugar"
@@ -446,7 +522,8 @@ async function loadVariableDiffLog(accountId, trailingDates) {
     // the variable-isolation check even when the contents are unreadable,
     // and inventing contents would be exactly the fake precision rule 0 of
     // the prompt forbids.
-    if (r.path === 'product.recipe' && r.encryptedDiff) {
+    const isRecipePath = r.path === 'product.recipe' || /^products\.(main|secondary|seasonal)\.recipe$/.test(r.path);
+    if (isRecipePath && r.encryptedDiff) {
       let diff = null;
       try {
         diff = JSON.parse(decryptRecipeText(r.encryptedDiff));
@@ -455,6 +532,10 @@ async function loadVariableDiffLog(accountId, trailingDates) {
       }
       const fenceLines = (lines) =>
         Array.isArray(lines) ? lines.map((l) => fenceUserText(l, 'core_product_recipe_ingredient')).filter(Boolean) : null;
+      // Slot-aware label for the honest could-not-be-read fallback (a
+      // pre-3-slot product.recipe record stays "core product").
+      const slotM = /^products\.(main|secondary|seasonal)\.recipe$/.exec(r.path);
+      const slotLabel = slotM ? slotM[1] + ' product' : 'core product';
       return {
         date: r.date,
         path: r.path,
@@ -463,7 +544,7 @@ async function loadVariableDiffLog(accountId, trailingDates) {
         newValue: diff ? { ingredientsAdded: fenceLines(diff.added) } : null,
         commitMessage: diff
           ? changelogCommitMessage(r)
-          : 'Updated the core product recipe (change contents could not be read).',
+          : `Updated the ${slotLabel} recipe (change contents could not be read).`,
         commitSha: null,
       };
     }
@@ -609,7 +690,7 @@ function safeJson(value) {
 }
 
 // ============================================================
-// The reasoning prompt, shipped verbatim per the design spec. The nine
+// The reasoning prompt, shipped verbatim per the design spec. The eleven
 // ${...} interpolation points are real template-literal interpolations —
 // each is filled with JSON.stringify'd, size-bounded data assembled above,
 // never raw-concatenated free text (owner notes are pre-fenced by
@@ -619,6 +700,10 @@ function safeJson(value) {
 function buildDirectivePrompt(ctx) {
   const businessJson = safeJson(ctx.business);
   const coreProductsJson = safeJson(ctx.coreProducts);
+  // Seasonal context (2026-07-23 three-slot build) — enums and booleans
+  // only, computed in code (getCurrentSeason + the stored season slot);
+  // deliberately carries no free text, so nothing here needs fencing.
+  const seasonalContextJson = safeJson(ctx.seasonalContext);
   const environmentItemsJson = safeJson(ctx.environmentItems);
   const variableDiffLog = safeJson(ctx.variableDiffLog);
   const dailyLogsTrailing = safeJson(ctx.dailyLogsTrailing);
@@ -785,11 +870,44 @@ ${businessJson}
   "open": true, "start": "07:00", "end": "15:00" }, ... 7 entries ], "priceTier": "string or
   number" }
 
-CORE PRODUCTS (core-products/<name>.json-shaped, one entry per product actually sold):
+CORE PRODUCTS (core-products/<name>.json-shaped, one entry per product actually sold — up to
+three, each tagged with its role):
 ${coreProductsJson}
-  Example shape: [ { "name": "belgian-waffle", "type": "string", "temp": "Hot" | "Cold",
-  "price": number, "recipe": { "ingredients": ["batter","butter","brown sugar","cinnamon",
-  "powdered sugar"] }, "toppings": "string", "extras": "string" } ]
+  Example shape: [ { "role": "main" | "secondary" | "seasonal", "name": "belgian-waffle",
+  "type": "string", "temp": "Hot" | "Cold", "price": number, "recipe": { "ingredients":
+  ["batter","butter","brown sugar","cinnamon","powdered sugar"] }, "toppings": "string",
+  "extras": "string", "season": "winter"|"spring"|"summer"|"fall" (seasonal role only) } ]
+  Roles: "main" is the actual core — what the shop is known for — and is always present.
+  "secondary" (optional) is something usually sold alongside it in the shop (a coffee, a drink,
+  a matcha tea); when present it is part of normal baseline reasoning exactly like main — same
+  weight, no seasonal treatment. "seasonal" (optional) carries a "season" naming the quarter the
+  owner says it sells in; how to reason about it is spelled out in SEASONAL CONTEXT below. A
+  recipe/ingredient/toppings change on ANY of the three is a tier-1 core-product change for the
+  priority framework in section 2 — the slots differ in seasonal interpretation, not in how
+  seriously a logged change to them is taken.
+
+SEASONAL CONTEXT — computed in code from the same "today" this whole request is anchored to,
+using the app's fixed quarterly season mapping (winter = Dec-Feb, spring = Mar-May,
+summer = Jun-Aug, fall = Sep-Nov):
+${seasonalContextJson}
+  Example shape: { "currentSeason": "winter"|"spring"|"summer"|"fall",
+  "seasonalProduct": { "season": "summer", "inSeason": false } | null }
+  seasonalProduct is null when this business never registered a seasonal product; when present,
+  it describes the CORE PRODUCTS entry above tagged "role": "seasonal".
+  HOW TO USE THIS — interpretive context ONLY, never arithmetic. Be precise about the data
+  reality: this app logs exactly one combined daily customers/sales pair for the whole business,
+  with NO per-product sales breakdown anywhere — the seasonal product's own contribution has
+  never been separately measured, so it cannot be subtracted from, added to, or "adjusted" out
+  of any baseline number, and the BASELINE / NOISE FLOOR figures below are whole-business and
+  NOT seasonally adjusted. Never claim otherwise, and never invent a seasonally-adjusted figure.
+  What you MAY do: when an outcome move lines up with the seasonal product's season starting or
+  ending (an in-season/out-of-season transition falling inside or near the trailing window),
+  treat that as a plausible, nameable explanation to weigh — a swing that coincides with a
+  seasonal push beginning or ending is often expected seasonality rather than an alarming
+  unexplained decline (or an earned unexplained win), and your directive may say so in plain
+  words, clearly framed as seasonal context rather than a measured per-product fact. This
+  context is never a tracked-variable diff, never upgrades your confidence tier on its own, and
+  never loosens the noise-floor gate (step 2) or the provisional-baseline cap (step 9).
 
 ENVIRONMENT ITEMS (environment-items/<slug>.json-shaped, one entry per QR-stickered object,
 each carrying its own comment stream):
@@ -1153,14 +1271,21 @@ const KEEP_LOGGING_MESSAGE = "Keep logging — nothing here has cleared what's n
 // promise (see the file header), recipe data is now stored encrypted and
 // read by this engine for real, so recipe-level causes CAN now be detected
 // and keeping that line would have been a false runtime claim. What's
-// honestly left: price. No price/priceTier field is tracked anywhere in
-// profile:<accountId> (see _gap_priceTier in reshapeProfileToRepoShape), so
-// price-level causes still cannot be detected from real data. index.html's
-// "Get today's read" caveat line renders off this field's presence — its
-// copy was updated in the same 2026-07-23 pass to name only the price gap;
-// keep the two in sync whenever this object changes again.
+// honestly left: price, and (named explicitly since the 2026-07-23
+// three-slot products build) per-product sales granularity. No
+// price/priceTier field is tracked anywhere in profile:<accountId> (see
+// _gap_priceTier in reshapeProfileToRepoShape), so price-level causes
+// still cannot be detected from real data. And log-entry.js stores exactly
+// one combined daily {customers, sales} pair for the whole business — no
+// per-product breakdown — which is precisely why the seasonal-product
+// feature is interpretive context in the prompt (see SEASONAL CONTEXT
+// there), never a mathematical exclusion or adjustment of any baseline
+// number. index.html's "Get today's read" caveat line renders off this
+// field's presence — its copy was updated in the same pass this gap was
+// added; keep the two in sync whenever this object changes again.
 const CAUSAL_DATA_GAPS = {
   priceData: 'No price/priceTier field is tracked anywhere in the stored business profile yet — price-level causes cannot be detected from real data.',
+  perProductSalesData: 'Daily customers/sales are logged as one combined whole-business pair — no per-product sales breakdown exists, so a seasonal (or any) product\'s own contribution can never be mathematically separated from the baseline; seasonal-product handling is interpretive reasoning context only.',
 };
 
 // Deterministic backstop for the two highest-stakes invariants section 0 /
@@ -1391,6 +1516,23 @@ async function computeDirectiveForAccount(accountId, today) {
     const { business, coreProducts } = reshapeProfileToRepoShape(profile);
     const dailyLogsTrailing = buildDailyLogsTrailing(trailingDates, entryByDate);
 
+    // Seasonal context (2026-07-23 three-slot build) — anchored to the SAME
+    // caller-supplied `today` every other piece of calendar math in this
+    // pipeline uses (never an ambient new Date()/Date.now(); see the date-
+    // helpers banner near the top of this file). Interpretive context for
+    // the prompt only — nothing here touches baselineData/outcomeMove or
+    // any other number (there is no per-product sales data to adjust them
+    // with; see the prompt's own SEASONAL CONTEXT section and
+    // CAUSAL_DATA_GAPS.perProductSalesData).
+    const currentSeason = getCurrentSeason(today);
+    const seasonalEntry = coreProducts.find((p) => p.role === 'seasonal' && p.season) || null;
+    const seasonalContext = {
+      currentSeason: currentSeason,
+      seasonalProduct: seasonalEntry
+        ? { season: seasonalEntry.season, inSeason: seasonalEntry.season === currentSeason }
+        : null,
+    };
+
     const outcomeMove = [
       {
         metric: 'customers',
@@ -1445,6 +1587,7 @@ async function computeDirectiveForAccount(accountId, today) {
     const systemPrompt = buildDirectivePrompt({
       business,
       coreProducts,
+      seasonalContext,
       environmentItems,
       variableDiffLog,
       dailyLogsTrailing,

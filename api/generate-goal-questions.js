@@ -487,7 +487,13 @@ module.exports = async function handler(req, res) {
       // equivalent fields (same underlying gap, fixed there too).
       name: fenceUserText(profile && profile.setup && profile.setup.businessName, 'business_name'),
       coreProduct: fenceUserText(
-        (profile && profile.setup && profile.setup.coreProduct) || (profile && profile.product && profile.product.type),
+        (profile && profile.setup && profile.setup.coreProduct) ||
+          // Three-slot products model (2026-07-23, save-profile.js): the
+          // main slot is the old singular profile.product, relocated —
+          // check the new shape first, keep the legacy singular fallback
+          // for profiles saved before the change.
+          (profile && profile.products && profile.products.main && profile.products.main.type) ||
+          (profile && profile.product && profile.product.type),
         'core_product_name'
       ),
     };

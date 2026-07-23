@@ -13,10 +13,47 @@ const { encryptRecipeText, decryptRecipeText } = require('./_recipe-crypto');
 // stale pre-pivot schema — businessType/products[]/environment — that nothing
 // ever read back). It now matches onboarding.html's real, live schema:
 // setup (businessName/ownerName/address/coreProduct), inventory (item list),
-// bindings (sticker -> item), product (type/temp/toppings/extras, plus
-// recipe — see the REVERSAL note below), schedule (7-day hours), and
-// payments (append-only $20 onboarding-charge confirmation log — see
-// sanitizePayment below).
+// bindings (sticker -> item), products (THREE-SLOT MODEL, 2026-07-23 — see
+// the note below; each slot is type/temp/toppings/extras plus recipe, see
+// the REVERSAL note below), schedule (7-day hours), and payments
+// (append-only onboarding-charge confirmation log — see sanitizePayment
+// below).
+//
+// THREE-SLOT PRODUCT MODEL (2026-07-23) — profile.product (singular) became
+// profile.products = { main, secondary, seasonal }. The founder's own slot
+// definitions: MAIN is "the actual core, what the shop is known for"
+// (required — this is the old single product, relocated); SECONDARY is
+// "usually accompanied in the shop along with other products, like a coffee
+// or a drink, matcha tea" (optional, part of normal baseline reasoning
+// exactly like main — no seasonal weighting); SEASONAL is optional and
+// carries a `season` (allow-listed, SEASON_VALUES below), in his words:
+// "Seasonal products will be popular and a part of the baseline during the
+// seasonal pushes. We want to make sure they are not a part of the baseline
+// when they are not a part of that season, because then it will drop the
+// baseline. Maybe we can make it so seasonal is an actual input that is
+// weighted differently based off of the expected time." IMPORTANT HONESTY
+// NOTE on what that last sentence can actually mean with today's data: this
+// app logs exactly ONE combined daily {customers, sales} pair for the whole
+// business (log-entry.js) — there is no per-product sales number anywhere,
+// so nothing here mathematically excludes or subtracts a seasonal product
+// from any baseline. What shipped instead: generate-directive.js feeds the
+// reasoning prompt explicit seasonal CONTEXT (current season, whether the
+// seasonal product is in-season) so the model can weigh a season-boundary
+// swing as a plausible explanation — interpretive context only, the same
+// "never law, just context" posture as profile.ownerContext. This is a
+// completion of intent already gestured at, not a pivot:
+// generate-directive.js has always shaped this data as a coreProducts ARRAY
+// (with one entry), and PRODUCT-CONTEXT.md's architecture section always
+// said "core-products/<name>.json — one file per recipe/product actually
+// sold" (plural).
+//
+// Legacy compatibility, both directions: an old stored profile with the
+// singular profile.product is READ as the main slot (see existingProducts
+// in the handler), and an old cached client still POSTing body.product
+// (singular) is routed into the main slot — so neither an existing account
+// nor a stale page ever silently loses its product data. On the first
+// products write, the legacy singular field is deleted so profile.products
+// is the single source of truth going forward.
 //
 // RECIPE REVERSAL (2026-07-23) — this endpoint used to EXCLUDE the recipe
 // field on purpose, matching onboarding.html's own on-screen promise that
@@ -81,6 +118,17 @@ const PAYMENTS_MAX = 20; // sane ceiling — this is a one-time onboarding charg
 // allow-listed enum like TIER_VALUES above — no free text accepted.
 const VISION_VALUES = ['retirement', 'franchise'];
 
+// PRODUCTS — three-slot model (2026-07-23, see the file header). The slot
+// names are fixed, never client-invented, and the seasonal slot's `season`
+// is an allow-listed enum exactly like TIER_VALUES/VISION_VALUES above —
+// never free text. Quarterly mapping (resolved from the founder's own
+// "the season changes every three months" / summer-roughly-June-August
+// framing): winter = Dec-Feb, spring = Mar-May, summer = Jun-Aug,
+// fall = Sep-Nov. generate-directive.js's getCurrentSeason() must always
+// use this same mapping.
+const PRODUCT_SLOTS = ['main', 'secondary', 'seasonal'];
+const SEASON_VALUES = ['winter', 'spring', 'summer', 'fall'];
+
 // OWNER CONTEXT (new, additive array field). "Never law, just context" —
 // free-form background notes the owner adds about their own business during
 // the pre-baseline period (invited by cron-baseline-context.js's day 1/4/7
@@ -97,11 +145,18 @@ const OWNER_CONTEXT_MAX = 20;
 // generate-directive.js's variableDiffLog was permanently `[]` because
 // nothing anywhere recorded a change; this closes that gap. Only the
 // fields the founder named as real business decisions are tracked here:
-// setup identity fields, product.type/temp/toppings/extras, product.recipe
+// setup identity fields, each product slot's type/temp/toppings/extras
+// plus the seasonal slot's season (paths products.main.type,
+// products.secondary.toppings, products.seasonal.season, etc. — the
+// three-slot extension of what used to be product.type etc.; pre-3-slot
+// records with the old singular product.* paths remain in the log as-is
+// and generate-directive.js still reads both), each slot's recipe
 // (SINCE 2026-07-23 — previously "never, full stop" per the old privacy
 // promise; see the RECIPE REVERSAL note in this file's header. Recipe
 // changes are logged as an ENCRYPTED line-diff, never as plaintext
-// oldValue/newValue — see the recipe-diff block in the handler), the 7-day
+// oldValue/newValue — see the per-slot recipe-diff pass in the handler,
+// changelog paths products.main.recipe / products.secondary.recipe /
+// products.seasonal.recipe), the 7-day
 // schedule (per-day open/start/end), and goal.metric/goal.target. Follows
 // this codebase's own established index+record pattern (see
 // submit-review.js's qrcommentindex:<accountId>/qrcomment:<accountId>:
@@ -169,16 +224,22 @@ function sanitizeBindingEntry(entry) {
   return { id: id, name: name };
 }
 
+// Per-slot product validator — reused unchanged for all three slots of the
+// products model (main/secondary/seasonal; see the file header). The
+// seasonal slot's extra `season` field is validated separately at the
+// handler's products block, against SEASON_VALUES, because it only exists
+// on that one slot.
 function sanitizeProduct(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const temp = raw.temp === 'Hot' || raw.temp === 'Cold' ? raw.temp : '';
   // recipe is deliberately NOT handled here even though it's accepted now
   // (see the RECIPE REVERSAL note in the file header): this function's
-  // output is plaintext-merged into profile.product, and the recipe must
-  // never be stored as plaintext. It has its own encrypt-before-store block
-  // in the handler instead — keeping it out of this merge also means a
-  // product save that omits recipe leaves the existing encrypted recipe
-  // untouched, exactly like every other merge-preserved field.
+  // output is plaintext-merged into the slot's stored object, and the
+  // recipe must never be stored as plaintext. Each slot has its own
+  // encrypt-before-store pass in the handler instead — keeping it out of
+  // this merge also means a product save that omits recipe leaves the
+  // slot's existing encrypted recipe untouched, exactly like every other
+  // merge-preserved field.
   return {
     type: cleanString(raw.type, 200),
     temp: temp,
@@ -349,47 +410,127 @@ module.exports = async function handler(req, res) {
       profile.bindings = cleanBindings;
     }
 
-    if (body.product !== undefined) {
-      const product = sanitizeProduct(body.product);
-      if (product) profile.product = Object.assign({}, profile.product, product);
-    }
-
-    // product.recipe — accepted since 2026-07-23 (see the RECIPE REVERSAL
-    // note in the file header), encrypted BEFORE it is ever stored. The
-    // plaintext exists only in this request's memory: it's length-capped,
-    // compared against the DECRYPTED previous value (the stored form is
-    // ciphertext and would never plaintext-equal anything, so the normal
-    // diffField comparison can't work here), line-diffed if it really
-    // changed, then encrypted into profile.product.recipe. Nothing below
-    // this block ever sees the plaintext again, and it never appears in any
-    // response, log line, or plaintext changelog record.
+    // ---- PRODUCTS: three-slot model (2026-07-23, see the file header) ----
     //
-    // Judgment call, matching this file's existing empty-string rejection
-    // style (cleanString + truthiness): an empty/whitespace-only recipe is
-    // ignored rather than treated as a delete — there's no "clear my
-    // recipe" UI anywhere today, so an empty value here is far more likely
-    // a client bug than an intentional erase of the owner's most sensitive
-    // field.
-    let recipeDiff = null; // plaintext { added, removed } — encrypted at the changelog write site below
-    if (body.product && typeof body.product === 'object' && typeof body.product.recipe === 'string') {
-      const recipePlain = body.product.recipe.trim().slice(0, RECIPE_MAX_LENGTH);
-      if (recipePlain) {
-        const previousStored =
-          existing.product && existing.product.recipe && typeof existing.product.recipe === 'object'
-            ? existing.product.recipe
-            : null;
-        // '' here means either "no recipe ever stored" (first save —
-        // onboarding, not a revision, so no changelog entry, matching
-        // diffField()'s own both-defined guard) or "stored blob failed to
-        // decrypt" (tampered/rotated key — no honest diff is computable, so
-        // none is invented; the new value still gets stored below).
-        const previousPlain = previousStored ? decryptRecipeText(previousStored) : '';
-        if (previousPlain && previousPlain !== recipePlain) {
-          recipeDiff = computeRecipeLineDiff(previousPlain, recipePlain);
+    // Legacy read: a profile saved before the three-slot model stored a
+    // single profile.product — treated here as the MAIN slot ("this is
+    // today's existing single product, just renamed/relocated"), so an
+    // existing account's product/recipe carries forward without a separate
+    // migration step. Computed unconditionally (not just when products were
+    // posted) because the changelog diff below compares against it either
+    // way.
+    const existingProducts =
+      existing.products && typeof existing.products === 'object' && !Array.isArray(existing.products)
+        ? existing.products
+        : existing.product && typeof existing.product === 'object'
+          ? { main: existing.product }
+          : {};
+
+    // Legacy write: an old cached client still POSTing body.product
+    // (singular) is routed into the main slot, so a stale page never
+    // silently loses its save. body.products (the real shape) wins if both
+    // are somehow present.
+    const bodyProducts =
+      body.products && typeof body.products === 'object' && !Array.isArray(body.products)
+        ? body.products
+        : body.product && typeof body.product === 'object'
+          ? { main: body.product }
+          : null;
+
+    // Per-slot plaintext { added, removed } recipe diffs — encrypted at the
+    // changelog write site below, exactly like the old single recipeDiff.
+    const slotRecipeDiffs = {};
+
+    if (bodyProducts) {
+      // Fresh container seeded from the (legacy-normalized) existing slots:
+      // a request touching only one slot never clobbers the others, and a
+      // legacy singular profile migrates to the three-slot shape on its
+      // first products write. A fresh object (never the existing.products
+      // reference itself) so slot writes below can never mutate `existing`
+      // out from under the changelog comparison.
+      profile.products = Object.assign({}, existingProducts);
+
+      for (const slot of PRODUCT_SLOTS) {
+        const raw = bodyProducts[slot];
+        if (!raw || typeof raw !== 'object') continue; // slot not sent this request — merge-preserved
+        const cleaned = sanitizeProduct(raw);
+
+        if (slot === 'seasonal') {
+          // season — allow-listed against SEASON_VALUES, never free text.
+          // Merge-preserved when omitted on a revision (an existing valid
+          // stored season stands in); a seasonal write with no valid season
+          // available from either source is rejected wholesale — a seasonal
+          // product without a season can't do the one job the slot exists
+          // for, and storing it season-less would be worse than rejecting.
+          const existingSeason =
+            existingProducts.seasonal && SEASON_VALUES.indexOf(existingProducts.seasonal.season) !== -1
+              ? existingProducts.seasonal.season
+              : null;
+          const season =
+            SEASON_VALUES.indexOf(raw.season) !== -1
+              ? raw.season
+              : raw.season === undefined
+                ? existingSeason
+                : null;
+          if (!season) continue;
+          if (cleaned) profile.products.seasonal = Object.assign({}, profile.products.seasonal, cleaned, { season: season });
+        } else if (cleaned) {
+          profile.products[slot] = Object.assign({}, profile.products[slot], cleaned);
         }
-        profile.product = profile.product && typeof profile.product === 'object' ? profile.product : {};
-        profile.product.recipe = encryptRecipeText(recipePlain);
+
+        // <slot>.recipe — accepted since 2026-07-23 (see the RECIPE
+        // REVERSAL note in the file header), encrypted BEFORE it is ever
+        // stored — the identical treatment the old single product.recipe
+        // block got, now applied independently per slot. The plaintext
+        // exists only in this request's memory: length-capped, compared
+        // against the DECRYPTED previous value (the stored form is
+        // ciphertext and would never plaintext-equal anything, so the
+        // normal diffField comparison can't work here), line-diffed if it
+        // really changed, then encrypted into profile.products.<slot>
+        // .recipe. Nothing below ever sees the plaintext again, and it
+        // never appears in any response, log line, or plaintext changelog
+        // record.
+        //
+        // Judgment call, carried over from the single-recipe version: an
+        // empty/whitespace-only recipe is ignored rather than treated as a
+        // delete — there's no "clear my recipe" UI anywhere today, so an
+        // empty value here is far more likely a client bug than an
+        // intentional erase of the owner's most sensitive field.
+        if (typeof raw.recipe === 'string') {
+          const recipePlain = raw.recipe.trim().slice(0, RECIPE_MAX_LENGTH);
+          // Seasonal guard: a seasonal recipe is never stored onto a slot
+          // that has no valid season (i.e. the seasonal write above was
+          // rejected and no prior seasonal slot exists) — otherwise a
+          // rejected seasonal payload could still leave a season-less
+          // seasonal slot behind via its recipe alone.
+          const seasonalSlotValid =
+            slot !== 'seasonal' || (profile.products.seasonal && SEASON_VALUES.indexOf(profile.products.seasonal.season) !== -1);
+          if (recipePlain && seasonalSlotValid) {
+            const previousStored =
+              existingProducts[slot] && existingProducts[slot].recipe && typeof existingProducts[slot].recipe === 'object'
+                ? existingProducts[slot].recipe
+                : null;
+            // '' here means either "no recipe ever stored on this slot"
+            // (first save — onboarding, not a revision, so no changelog
+            // entry, matching diffField()'s own both-defined guard) or
+            // "stored blob failed to decrypt" (tampered/rotated key — no
+            // honest diff is computable, so none is invented; the new
+            // value still gets stored below).
+            const previousPlain = previousStored ? decryptRecipeText(previousStored) : '';
+            if (previousPlain && previousPlain !== recipePlain) {
+              slotRecipeDiffs[slot] = computeRecipeLineDiff(previousPlain, recipePlain);
+            }
+            profile.products[slot] = profile.products[slot] && typeof profile.products[slot] === 'object' ? profile.products[slot] : {};
+            profile.products[slot].recipe = encryptRecipeText(recipePlain);
+          }
+        }
       }
+
+      // The legacy singular field is retired on the first products write —
+      // profile.products is the single source of truth from here on, and
+      // leaving a stale profile.product behind would hand every reader two
+      // conflicting copies of the main product.
+      if (profile.product !== undefined) delete profile.product;
     }
 
     if (body.schedule !== undefined) {
@@ -469,13 +610,14 @@ module.exports = async function handler(req, res) {
     // way, since a section that wasn't sent leaves `profile` equal to
     // `existing` for those fields, which never produces a diff.
     //
-    // product.recipe is handled by its own dedicated block above the
-    // changelog write below (SINCE 2026-07-23 — it used to be a hard "never
-    // diffed or logged, full stop" line; see the RECIPE REVERSAL note in
-    // the file header for why that changed): its stored form is ciphertext,
-    // so it can't go through diffField()'s plaintext comparison, and its
-    // changelog record stores an ENCRYPTED line-diff instead of plaintext
-    // oldValue/newValue.
+    // Each product slot's recipe is handled by its own dedicated per-slot
+    // pass above the changelog write below (SINCE 2026-07-23 — it used to
+    // be a hard "never diffed or logged, full stop" line; see the RECIPE
+    // REVERSAL note in the file header for why that changed, and the
+    // three-slot note for why there are now up to three such records per
+    // request): a recipe's stored form is ciphertext, so it can't go
+    // through diffField()'s plaintext comparison, and its changelog record
+    // stores an ENCRYPTED line-diff instead of plaintext oldValue/newValue.
     //
     // A field moving from undefined to a real value (first-ever save) is
     // onboarding, not a business decision being revised, and is never
@@ -496,14 +638,32 @@ module.exports = async function handler(req, res) {
     diffField('setup.address', 'address', oldSetup.address, newSetup.address);
     diffField('setup.coreProduct', 'coreProduct', oldSetup.coreProduct, newSetup.coreProduct);
 
-    const oldProduct = existing.product || {};
-    const newProduct = profile.product || {};
-    diffField('product.type', 'type', oldProduct.type, newProduct.type);
-    diffField('product.temp', 'temp', oldProduct.temp, newProduct.temp);
-    diffField('product.toppings', 'toppings', oldProduct.toppings, newProduct.toppings);
-    diffField('product.extras', 'extras', oldProduct.extras, newProduct.extras);
-    // product.recipe: diffed via its own encrypt-aware block above (see
-    // `recipeDiff`), never through diffField — see comment block above.
+    // Per-slot product diffs (three-slot model, 2026-07-23) — the exact
+    // diffField treatment product.type/temp/toppings/extras used to get,
+    // now once per slot under slot-qualified paths (products.main.type,
+    // products.secondary.toppings, ...), plus the seasonal slot's season.
+    // oldProducts is the legacy-normalized view (a pre-3-slot singular
+    // profile.product reads as the main slot), so a migrated profile's
+    // first real revision diffs correctly against its old values — under
+    // the new products.main.* paths, while its older records keep their
+    // original product.* paths in the log (generate-directive.js reads
+    // both).
+    const oldProducts = existingProducts;
+    const newProducts = profile.products && typeof profile.products === 'object' ? profile.products : oldProducts;
+    PRODUCT_SLOTS.forEach(function (slot) {
+      const oldSlot = oldProducts[slot] || {};
+      const newSlot = newProducts[slot] || {};
+      diffField('products.' + slot + '.type', 'type', oldSlot.type, newSlot.type);
+      diffField('products.' + slot + '.temp', 'temp', oldSlot.temp, newSlot.temp);
+      diffField('products.' + slot + '.toppings', 'toppings', oldSlot.toppings, newSlot.toppings);
+      diffField('products.' + slot + '.extras', 'extras', oldSlot.extras, newSlot.extras);
+      if (slot === 'seasonal') {
+        diffField('products.seasonal.season', 'season', oldSlot.season, newSlot.season);
+      }
+    });
+    // Each slot's recipe: diffed via the encrypt-aware per-slot pass above
+    // (see `slotRecipeDiffs`), never through diffField — see comment block
+    // above.
 
     const oldScheduleByDay = scheduleByDay(existing.schedule);
     const newScheduleByDay = scheduleByDay(profile.schedule);
@@ -520,7 +680,8 @@ module.exports = async function handler(req, res) {
     diffField('goal.metric', 'metric', oldGoal.metric, newGoal.metric);
     diffField('goal.target', 'target', oldGoal.target, newGoal.target);
 
-    if (changeEntries.length > 0 || recipeDiff) {
+    const hasRecipeDiffs = PRODUCT_SLOTS.some(function (slot) { return !!slotRecipeDiffs[slot]; });
+    if (changeEntries.length > 0 || hasRecipeDiffs) {
       const changeTimestamp = Date.now(); // server-assigned, never client-supplied
       const changedAt = new Date(changeTimestamp).toISOString();
       const changeDate = changedAt.slice(0, 10);
@@ -539,25 +700,33 @@ module.exports = async function handler(req, res) {
         });
         pipeline.zadd(indexKey, { score: changeTimestamp, member: recordKey });
       });
-      // Recipe change record — same key scheme/index as every other tracked
-      // field, but NO plaintext oldValue/newValue (storing before/after
-      // recipe text in the clear would defeat encrypting the field itself).
-      // Instead: encryptedDiff, an AES-256-GCM blob whose plaintext is
-      // JSON.stringify({ added: [...], removed: [...] }) — the line-level
-      // ingredient diff computeRecipeLineDiff() produced above.
-      // generate-directive.js's loadVariableDiffLog() decrypts it in memory
-      // when building the reasoning prompt (see that file's SWAP POINT 3).
-      if (recipeDiff) {
-        const recipeRecordKey = `changelog:${accountId}:${changeTimestamp}:${slugifyPath('product.recipe')}`;
+      // Recipe change records — same key scheme/index as every other
+      // tracked field, but NO plaintext oldValue/newValue (storing
+      // before/after recipe text in the clear would defeat encrypting the
+      // field itself). Instead: encryptedDiff, an AES-256-GCM blob whose
+      // plaintext is JSON.stringify({ added: [...], removed: [...] }) —
+      // the line-level ingredient diff computeRecipeLineDiff() produced
+      // above. One record per changed slot, under its own slot-qualified
+      // path (products.main.recipe / products.secondary.recipe /
+      // products.seasonal.recipe — the three-slot extension of the old
+      // single product.recipe record). generate-directive.js's
+      // loadVariableDiffLog() decrypts them in memory when building the
+      // reasoning prompt (see that file's SWAP POINT 3); it still reads
+      // older product.recipe records too.
+      PRODUCT_SLOTS.forEach(function (slot) {
+        const diff = slotRecipeDiffs[slot];
+        if (!diff) return;
+        const recipePath = 'products.' + slot + '.recipe';
+        const recipeRecordKey = `changelog:${accountId}:${changeTimestamp}:${slugifyPath(recipePath)}`;
         pipeline.set(recipeRecordKey, {
           date: changeDate,
-          path: 'product.recipe',
+          path: recipePath,
           field: 'recipe',
-          encryptedDiff: encryptRecipeText(JSON.stringify(recipeDiff)),
+          encryptedDiff: encryptRecipeText(JSON.stringify(diff)),
           changedAt: changedAt,
         });
         pipeline.zadd(indexKey, { score: changeTimestamp, member: recipeRecordKey });
-      }
+      });
       await pipeline.exec();
 
       // Best-effort cap — never let a trim failure block a real profile
