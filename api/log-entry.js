@@ -3,6 +3,13 @@ const { getSessionFromRequest } = require('./_session');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const NOTE_MAX_LENGTH = 280;
+// Sane per-day ceilings for a single small restaurant/cafe location — not a
+// real-world record, just a backstop so a bad/malicious client value can't
+// corrupt generate-directive.js's mean/stdev baseline math. `sales` is in
+// whole dollars (see the "Sales today ($)" input in app/index.html, step
+// 0.01), not cents.
+const MAX_CUSTOMERS_PER_DAY = 100000;
+const MAX_SALES_PER_DAY = 1000000;
 
 // Account-scoped: every business gets its own logentry:<accountId>:<date>
 // keys and its own logdates:<accountId> sorted set — previously a single
@@ -42,9 +49,17 @@ module.exports = async function handler(req, res) {
       res.status(400).json({ error: 'customers must be a finite number >= 0' });
       return;
     }
+    if (customers > MAX_CUSTOMERS_PER_DAY) {
+      res.status(400).json({ error: `customers must be <= ${MAX_CUSTOMERS_PER_DAY}` });
+      return;
+    }
 
     if (!Number.isFinite(sales) || sales < 0) {
       res.status(400).json({ error: 'sales must be a finite number >= 0' });
+      return;
+    }
+    if (sales > MAX_SALES_PER_DAY) {
+      res.status(400).json({ error: `sales must be <= ${MAX_SALES_PER_DAY}` });
       return;
     }
 

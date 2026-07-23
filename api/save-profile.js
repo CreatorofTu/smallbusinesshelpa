@@ -29,11 +29,25 @@ const { getSessionFromRequest } = require('./_session');
 const STRING_CAP = 200;
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const INVENTORY_MAX_ITEMS = 200; // sane ceiling for a single small restaurant's item list
+const BINDINGS_MAX_KEYS = 200; // hard cap on client-supplied key count, checked before we loop
+const GOAL_TARGET_MAX = 100000; // sane ceiling for a small business's daily customer/sales count
+// Inventory item IDs and sticker-binding item IDs are stored inside KV keys
+// elsewhere in this app (KV keys use ':' as a segment delimiter, e.g.
+// profile:<accountId>) — restrict to a safe charset so a ':' or other
+// delimiter-ish character can never get embedded in a stored ID and later
+// break KV key parsing downstream.
+const ID_RE = /^[A-Za-z0-9_-]+$/;
 
 function cleanString(v, cap) {
   if (typeof v !== 'string') return '';
   const s = v.trim();
   return s.length > (cap || STRING_CAP) ? s.slice(0, cap || STRING_CAP) : s;
+}
+
+function sanitizeId(v, cap) {
+  const s = cleanString(v, cap || 100);
+  return s && ID_RE.test(s) ? s : '';
 }
 
 function sanitizeSetup(raw) {
@@ -49,9 +63,9 @@ function sanitizeSetup(raw) {
 function sanitizeInventory(raw) {
   if (!Array.isArray(raw)) return null;
   return raw
-    .slice(0, 500) // hard cap — this is a walk-around list, not unbounded input
+    .slice(0, INVENTORY_MAX_ITEMS) // hard cap — this is a walk-around list, not unbounded input
     .map(function (row) {
-      const id = cleanString(row && row.id, 100);
+      const id = sanitizeId(row && row.id, 100);
       const name = cleanString(row && row.name, 100);
       const count = Number(row && row.count);
       return {
@@ -65,7 +79,7 @@ function sanitizeInventory(raw) {
 
 function sanitizeBindingEntry(entry) {
   if (!entry || typeof entry !== 'object') return null;
-  const id = cleanString(entry.id, 100);
+  const id = sanitizeId(entry.id, 100);
   const name = cleanString(entry.name, 100);
   if (!id || !name) return null;
   return { id: id, name: name };
@@ -107,7 +121,7 @@ function sanitizeGoal(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const metric = GOAL_METRICS.indexOf(raw.metric) !== -1 ? raw.metric : null;
   const target = Number(raw.target);
-  if (!metric || !Number.isFinite(target) || target < 0) return null;
+  if (!metric || !Number.isFinite(target) || target < 0 || target > GOAL_TARGET_MAX) return null;
   return { metric: metric, target: target, setAt: new Date().toISOString() };
 }
 
@@ -159,7 +173,10 @@ module.exports = async function handler(req, res) {
     // current onboarding.html call site, which sends single bindings above).
     if (body.bindings && typeof body.bindings === 'object' && !Array.isArray(body.bindings)) {
       const cleanBindings = {};
-      for (const k in body.bindings) {
+      // Hard cap on client-supplied key count, checked before we loop — this
+      // object is client-controlled and otherwise unbounded before filtering.
+      const bindingKeys = Object.keys(body.bindings).slice(0, BINDINGS_MAX_KEYS);
+      for (const k of bindingKeys) {
         const num = Math.floor(Number(k));
         const entry = sanitizeBindingEntry(body.bindings[k]);
         if (num >= 1 && num <= 100 && entry) cleanBindings[String(num)] = entry;

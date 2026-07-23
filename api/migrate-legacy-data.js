@@ -136,6 +136,7 @@ module.exports = async function handler(req, res) {
       note: 'Old global keys (businessProfile, logentry:<date>, logdates, sub:*, subscriptions) were left in place, untouched — nothing was deleted.',
     });
   } catch (err) {
-    res.status(500).json({ error: 'Something went wrong.', detail: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Something went wrong.' });
   }
 };

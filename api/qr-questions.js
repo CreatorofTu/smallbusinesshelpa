@@ -34,11 +34,12 @@ const { kv } = require('@vercel/kv');
 // codebase yet (onboarding.html's sticker-assign screen has no server call
 // beyond saveStickerBinding, which just persists the id/name pair) — so the
 // pragmatic equivalent, exactly as scoped, is generate-on-first-request,
-// then cache forever in itemquestions:<accountId>:<itemId>. The first
-// customer to scan a freshly-stickered item pays the one-time generation
-// cost; every scan after that — including this same item on a different
-// business's tablet or a repeat visitor days later — is a cache hit, no
-// model call, no drift in what's shown.
+// then cache in itemquestions:<accountId>:<itemId> for ITEM_QUESTIONS_TTL_SECONDS
+// (60 days — see that constant's own comment). The first customer to scan a
+// freshly-stickered item pays the one-time generation cost; every scan after
+// that — including this same item on a different business's tablet or a
+// repeat visitor days later — is a cache hit, no model call, no drift in
+// what's shown, until the TTL lapses and the next scan regenerates it.
 // ============================================================
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -67,6 +68,17 @@ const ITEM_ID_MAX = 100; // matches save-profile.js's own inventory row id cap
 // and not trustworthy.
 const GEN_WINDOW_SECONDS = 60 * 60; // 1 hour
 const MAX_GENERATIONS_PER_HOUR = 30; // generous — legit traffic is "scan a freshly-stickered item", rare per visitor
+
+// ---- item-question cache TTL ----
+// Previously cached forever (no expiry) — fine for cost control (this is the
+// whole point of the cache) but means a generated question set, however
+// stale-sounding an item label becomes over months, never refreshes on its
+// own. 60 days: long enough that normal traffic essentially never
+// regenerates (this is still "generate once, not per scan" per the file's
+// own header), short enough that content isn't frozen forever. Applied via
+// kv.set's own options arg, same convention as the `{ nx: true, ex: 15 }`
+// lock just below rather than a separate kv.expire call.
+const ITEM_QUESTIONS_TTL_SECONDS = 60 * 60 * 24 * 60; // 60 days
 
 function getClientIp(req) {
   const xf = req.headers['x-forwarded-for'];
@@ -428,7 +440,7 @@ module.exports = async function handler(req, res) {
     // generation) — normalize to the uniform {key,type,prompt} shape and
     // cache the plain-string form (cheaper to store, and the shape this
     // cache's own read-hit branch above already expects).
-    await kv.set(cacheKey, { questions, generatedAt: new Date().toISOString() }).catch(() => {});
+    await kv.set(cacheKey, { questions, generatedAt: new Date().toISOString() }, { ex: ITEM_QUESTIONS_TTL_SECONDS }).catch(() => {});
 
     res.status(200).json({
       ok: true,

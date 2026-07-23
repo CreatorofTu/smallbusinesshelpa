@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Justaddegg — QR stickers</title>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#ffffff">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Justaddegg">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+
+<!--
+  ============================================================
+  qr-stickers.html — real, owner-facing screen that lists the account's
+  real bound items (profile:<accountId>.bindings, via /api/qr-stickers)
+  and generates the real, printable QR code for each one's actual
+  customer-facing scan URL: review.html?business=<accountId>&item=<itemId>.
+
+  Closes the gap named in PRODUCT-CONTEXT.md's "QR-code environment-review
+  system" section: that URL has always existed conceptually (review.html
+  + qr-questions.js already read it), but nothing ever generated or
+  displayed it for a real owner to actually print and stick up.
+
+  Owner-facing, session-authenticated, part of the normal installed app —
+  unlike review.html (deliberately a separate, standalone, no-manifest,
+  no-service-worker file for the anonymous customer actor), this page
+  intentionally DOES carry the manifest/apple meta tags above, matching
+  index.html/onboarding.html, since it's the same owner using the same
+  installed PWA.
+
+  QR RENDERING — NON-NEGOTIABLE STYLE RULE, already settled this session
+  (see PRODUCT-CONTEXT.md's "QR visual style" section): plain black/white
+  square modules only. No rounded dots, no center logo, no brand color.
+  A styled render (qr-code-styling, rounded dots + logo) was tried earlier
+  this session and failed a real OpenCV decode test; the plain classic
+  square decoded correctly. This page uses /vendor/qrcode-generator.js
+  (the well-known, MIT-licensed, dependency-free "qrcode-generator"
+  library — vendored verbatim, see that file's own header for exact
+  provenance/checksum) purely for its `renderTo2dContext`, which draws
+  exactly that plain style. Do not add styling here without a real
+  physical-phone-camera scan test first, per that section's own standing
+  rule.
+  ============================================================
+-->
+
+<style>
+  @font-face {
+    font-family: 'Fustat';
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/Fustat-Variable.ttf') format('truetype-variations');
+  }
+
+  :root {
+    --bg: #ffffff;
+    --ink: #000000;
+    --ink-soft: #666666;
+    --line: #e0e0e0;
+    --font: 'Fustat', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+  }
+  main {
+    width: 100%;
+    max-width: 720px;
+    padding: 2rem 1.25rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wordmark {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.4rem;
+    padding: .5rem .75rem;
+    margin-left: -.75rem;
+  }
+  .back-link {
+    font-family: var(--font);
+    font-weight: 400;
+    font-size: 1rem;
+    color: var(--ink);
+    background: none;
+    border: none;
+    padding: .5rem .75rem;
+    margin-right: -.75rem;
+    cursor: pointer;
+  }
+  .back-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
+  h1 {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.3rem;
+    line-height: 1.25;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h2 {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1.3;
+    margin: 0;
+  }
+  p { margin: 0; line-height: 1.55; max-width: 62ch; }
+  .soft { color: var(--ink-soft); font-size: .95rem; }
+
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%);
+  }
+  .card[hidden] { display: none; }
+
+  button {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1rem;
+    padding: .65rem 1.1rem;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    align-self: flex-start;
+    min-height: 44px; /* 44x44 minimum tap target */
+  }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  button:hover { border-color: var(--ink); }
+  button:disabled { opacity: .5; cursor: default; }
+
+  .tertiary-link {
+    background: none; border: none; color: var(--ink-soft); text-decoration: underline;
+    font-family: var(--font); font-size: .85rem; cursor: pointer; padding: .3em .2em;
+    align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center;
+  }
+  .tertiary-link:hover { color: var(--ink); }
+  .tertiary-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+
+  .status { font-size: .9rem; color: var(--ink-soft); min-height: 1.2em; }
+  .status.error { color: var(--ink); font-weight: 700; }
+
+  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+
+  .sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+
+  .sticker-card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .6rem;
+    text-align: center;
+    background: var(--bg);
+  }
+  .sticker-name { font-weight: 700; font-size: 1rem; margin: 0; }
+  .sticker-meta { color: var(--ink-soft); font-size: .8rem; margin: 0; }
+  .qr-canvas {
+    width: 168px;
+    height: 168px;
+    image-rendering: pixelated;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .sticker-url {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .68rem;
+    line-height: 1.4;
+    color: var(--ink-soft);
+    word-break: break-all;
+    margin: 0;
+    max-width: 100%;
+  }
+  .orphan-note {
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--ink);
+    background: var(--line);
+    border-radius: 8px;
+    padding: .45rem .6rem;
+    margin: 0;
+  }
+  .copy-btn {
+    font-size: .82rem;
+    padding: .4rem .8rem;
+    min-height: 36px;
+  }
+
+  .general-section { border-top: 1px solid var(--line); padding-top: 1.25rem; display: flex; flex-direction: column; gap: .75rem; }
+
+  @media print {
+    .no-print { display: none !important; }
+    body { display: block; }
+    main { max-width: none; padding: 0; gap: 1rem; }
+    .sticker-grid { grid-template-columns: repeat(3, 1fr); gap: .5in .3in; }
+    .sticker-card { border: 1px dashed #000; break-inside: avoid; page-break-inside: avoid; }
+    .qr-canvas { border: none; width: 1.6in; height: 1.6in; }
+    .card { border: none; background: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="header-row no-print">
+    <span class="wordmark">Justaddegg</span>
+    <button type="button" class="back-link" id="back-btn">Back</button>
+  </div>
+
+  <div class="no-print">
+    <h1>Your QR stickers</h1>
+    <p class="soft">Each code below opens a quick feedback page for one specific thing in your business — the same items you already walked around and bound to a numbered sticker. Print this page, cut them out, and stick each one on the real thing it's about.</p>
+  </div>
+
+  <div class="status" id="load-status">Loading your bindings…</div>
+
+  <div class="card" id="empty-card" hidden>
+    <strong>No stickers bound yet</strong>
+    <p class="soft">You haven't bound any items to a sticker yet — that happens in your setup's walk-around step. Once you've bound at least one, its real QR code will show up here.</p>
+    <button type="button" id="empty-setup-btn">Go to setup</button>
+  </div>
+
+  <div class="card" id="error-card" hidden>
+    <strong>Couldn't load your stickers</strong>
+    <p class="soft" id="error-text">Something went wrong. Try again in a bit.</p>
+  </div>
+
+  <div id="results" hidden>
+    <div class="toolbar no-print">
+      <p class="soft" id="count-text"></p>
+      <button type="button" id="print-btn">Print this page</button>
+    </div>
+
+    <div class="sticker-grid" id="sticker-grid"></div>
+  </div>
+
+  <!-- Independent of bindings — the general/door code only needs the
+       account id, so it renders as soon as the profile loads at all, even
+       before the owner has bound a single item. -->
+  <div class="general-section" id="general-section" hidden>
+    <div class="no-print">
+      <h2>General code (door / register)</h2>
+      <p class="soft">Not tied to one item — a broad "how was your visit" code. Place it wherever's convenient, like the door or the register.</p>
+    </div>
+    <div class="sticker-grid">
+      <div class="sticker-card" id="general-card">
+        <p class="sticker-name">How was your visit?</p>
+        <p class="sticker-meta">General code</p>
+        <canvas class="qr-canvas" id="general-qr-canvas" role="img"></canvas>
+        <p class="sticker-url" id="general-url"></p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/vendor/qrcode-generator.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // Hardcoded to the app's real production origin — deliberately NOT
+  // derived from location.origin. Stickers generated here get printed and
+  // physically placed in a real restaurant; if this page were ever opened
+  // from a Vercel preview deployment URL, deriving from location.origin
+  // would silently bake that throwaway preview domain into a printed
+  // sticker. See PRODUCT-CONTEXT.md's "Identity" section for the live URL.
+  var APP_ORIGIN = 'https://smallbusinesshelpa.vercel.app';
+
+  function $(id) { return document.getElementById(id); }
+
+  // Plain, classic black/white square QR render — see this file's header
+  // and vendor/qrcode-generator.js's own header for why this must never be
+  // swapped for a styled/rounded/logo renderer. `qr.renderTo2dContext` is
+  // the vendored library's own unmodified method; the only thing added
+  // here is a proper quiet-zone margin (>=4 modules, per the QR spec's own
+  // minimum recommendation for reliable scanning) and a fixed, print-safe
+  // pixel resolution.
+  var MODULE_PX = 8;   // physical canvas pixels per QR module — kept high for crisp printed edges
+  var QUIET_ZONE = 4;  // modules of white margin on every side
+
+  function renderQrToCanvas(canvas, text) {
+    var qr = window.qrcode(0, 'M'); // 0 = auto-pick the smallest version that fits this text
+    qr.addData(text, 'Byte');
+    qr.make();
+
+    var moduleCount = qr.getModuleCount();
+    var size = (moduleCount + QUIET_ZONE * 2) * MODULE_PX;
+    canvas.width = size;
+    canvas.height = size;
+
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(QUIET_ZONE * MODULE_PX, QUIET_ZONE * MODULE_PX);
+    qr.renderTo2dContext(ctx, MODULE_PX);
+    ctx.restore();
+  }
+
+  function reviewUrl(accountId, itemId) {
+    var url = APP_ORIGIN + '/review.html?business=' + encodeURIComponent(accountId);
+    if (itemId) url += '&item=' + encodeURIComponent(itemId);
+    return url;
+  }
+
+  function makeStickerCard(name, metaText, url, orphaned) {
+    var card = document.createElement('div');
+    card.className = 'sticker-card';
+
+    var nameEl = document.createElement('p');
+    nameEl.className = 'sticker-name';
+    nameEl.textContent = name;
+    card.appendChild(nameEl);
+
+    var metaEl = document.createElement('p');
+    metaEl.className = 'sticker-meta';
+    metaEl.textContent = metaText;
+    card.appendChild(metaEl);
+
+    if (orphaned) {
+      var note = document.createElement('p');
+      note.className = 'orphan-note no-print';
+      note.textContent = "This item isn't in your current list anymore — this code won't work for a customer until you restore it or rebind the sticker.";
+      card.appendChild(note);
+    }
+
+    var canvas = document.createElement('canvas');
+    canvas.className = 'qr-canvas';
+    canvas.setAttribute('aria-label', 'QR code linking to the feedback page for ' + name);
+    card.appendChild(canvas);
+    renderQrToCanvas(canvas, url);
+
+    var urlEl = document.createElement('p');
+    urlEl.className = 'sticker-url';
+    urlEl.textContent = url;
+    card.appendChild(urlEl);
+
+    var copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'tertiary-link copy-btn no-print';
+    copyBtn.textContent = 'Copy link';
+    copyBtn.addEventListener('click', function () {
+      var done = function () { copyBtn.textContent = 'Copied'; setTimeout(function () { copyBtn.textContent = 'Copy link'; }, 1500); };
+      var fail = function () { copyBtn.textContent = "Couldn't copy"; setTimeout(function () { copyBtn.textContent = 'Copy link'; }, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done).catch(fail);
+      } else {
+        fail();
+      }
+    });
+    card.appendChild(copyBtn);
+
+    return card;
+  }
+
+  function render(data) {
+    var items = Array.isArray(data.items) ? data.items : [];
+
+    // General/door code only needs the account id — render it regardless
+    // of whether any item has been bound to a sticker yet.
+    var generalUrl = reviewUrl(data.accountId, null);
+    renderQrToCanvas($('general-qr-canvas'), generalUrl);
+    $('general-url').textContent = generalUrl;
+    $('general-section').hidden = false;
+
+    if (items.length === 0) {
+      $('empty-card').hidden = false;
+      return;
+    }
+
+    $('results').hidden = false;
+    $('count-text').textContent = items.length + (items.length === 1 ? ' sticker bound' : ' stickers bound');
+
+    var grid = $('sticker-grid');
+    grid.innerHTML = '';
+    items.forEach(function (item) {
+      var url = reviewUrl(data.accountId, item.id);
+      var meta = 'Sticker #' + item.sticker;
+      var card = makeStickerCard(item.name || ('Sticker #' + item.sticker), meta, url, !!item.orphaned);
+      grid.appendChild(card);
+    });
+  }
+
+  function load() {
+    fetch('/api/qr-stickers', { credentials: 'same-origin' })
+      .then(function (r) {
+        if (r.status === 401) {
+          location.href = '/onboarding.html?mode=login';
+          return null;
+        }
+        return r.json().then(function (j) { return { ok: r.ok, body: j }; });
+      })
+      .then(function (res) {
+        if (!res) return; // redirecting to login
+        $('load-status').hidden = true;
+        if (!res.ok || !res.body || res.body.ok !== true) {
+          $('error-text').textContent = (res.body && res.body.error) || "Couldn't load your stickers — try again in a bit.";
+          $('error-card').hidden = false;
+          return;
+        }
+        render(res.body);
+      })
+      .catch(function () {
+        $('load-status').hidden = true;
+        $('error-text').textContent = "Couldn't load your stickers — check your connection and try again.";
+        $('error-card').hidden = false;
+      });
+  }
+
+  function mount() {
+    $('back-btn').addEventListener('click', function () { location.href = '/index.html'; });
+    $('empty-setup-btn').addEventListener('click', function () { location.href = '/onboarding.html'; });
+    $('print-btn').addEventListener('click', function () { window.print(); });
+    load();
+  }
+
+  mount();
+})();
+</script>
+</body>
+</html>

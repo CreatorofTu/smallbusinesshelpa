@@ -945,6 +945,26 @@ function directiveCacheKey(accountId, today) {
   return `directivecache:${accountId}:${today}`;
 }
 
+// DATE_RE above only checks that `today` looks like YYYY-MM-DD — it doesn't
+// stop a caller from sending a valid-looking but fake date (e.g. one from
+// next month) purely to mint a fresh, never-colliding
+// directivecache:<accountId>:<date> key on every call and defeat the whole
+// point of the cache above (bounding real, billed Anthropic spend). This
+// check closes that gap by requiring `today` to fall within a small window
+// of the server's own real clock. Unlike parseDateUTC/windowDates above,
+// this one deliberately DOES use the server's real new Date() — it's a
+// security bound on the request, not the caller-local-"today" calendar math
+// those functions do their business-logic day-window computation from, so
+// the "never touches new Date()" rule up there doesn't apply here.
+const CACHE_KEY_DATE_WINDOW_DAYS = 2;
+function isWithinServerDateWindow(dateStr, windowDays) {
+  const dateMs = parseDateUTC(dateStr);
+  if (!Number.isFinite(dateMs)) return false;
+  const serverTodayMs = parseDateUTC(formatDateUTC(Date.now()));
+  const diffDays = Math.abs(dateMs - serverTodayMs) / DAY_MS;
+  return diffDays <= windowDays;
+}
+
 function notConfiguredResponse() {
   return {
     ok: true,
@@ -1023,6 +1043,10 @@ module.exports = async function handler(req, res) {
     const { today } = req.body || {};
     if (!today || typeof today !== 'string' || !DATE_RE.test(today)) {
       res.status(400).json({ error: 'Missing or malformed today' });
+      return;
+    }
+    if (!isWithinServerDateWindow(today, CACHE_KEY_DATE_WINDOW_DAYS)) {
+      res.status(400).json({ error: 'today is outside the allowed date window' });
       return;
     }
 

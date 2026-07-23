@@ -278,6 +278,8 @@
     <strong>You're set</strong>
     <p class="soft">Log today's numbers, and we'll tell you when something's worth a second look.</p>
 
+    <button class="tertiary-link" id="qr-stickers-btn" type="button">Print your QR stickers</button>
+
     <form id="log-form">
       <div class="field-row">
         <label>Customers today
@@ -369,6 +371,7 @@
     logStatus: document.getElementById('log-status'),
     summaryBlock: document.getElementById('summary-block'),
     summaryText: document.getElementById('summary-text'),
+    qrStickersBtn: document.getElementById('qr-stickers-btn'),
     readBtn: document.getElementById('read-btn'),
     readStatus: document.getElementById('read-status'),
     readBlock: document.getElementById('read-block'),
@@ -867,6 +870,7 @@
   function mount() {
     render();
     els.loginBtn.addEventListener('click', handleLoginClick);
+    els.qrStickersBtn.addEventListener('click', function () { location.href = '/qr-stickers.html'; });
     els.chromeInstallBtn.addEventListener('click', handleChromeInstall);
     els.enableBtn.addEventListener('click', handleEnable);
     els.readBtn.addEventListener('click', handleGetRead);
