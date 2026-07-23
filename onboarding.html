@@ -139,7 +139,14 @@
   #setup-tier-block { display: flex; flex-direction: column; gap: .6rem; margin-top: .5rem; }
   #setup-tier-block button { align-self: stretch; }
   label, .field-label { display: flex; flex-direction: column; gap: .35rem; font-size: .85rem; color: var(--ink-soft); }
-  label[hidden] { display: none; } /* author-origin `label{display:flex}` above otherwise beats the UA-stylesheet [hidden] rule regardless of source order, since normal-importance author rules always win over normal-importance UA ones -- real bug found live 2026-07-23: package-address-row stayed visually flex-displayed despite .hidden === true */
+  /* Any element whose own rule sets display:flex/inline-flex/grid/etc (label,
+     .tertiary-link, ...) otherwise beats the UA-stylesheet [hidden] rule
+     regardless of source order, since normal-importance author rules always
+     win over normal-importance UA ones. Found live 2026-07-23 twice, on two
+     different elements (package-address-row, then setup-paid-confirm) --
+     a global !important catch-all closes the whole bug class at once
+     instead of patching one collision at a time as each surfaces. */
+  [hidden] { display: none !important; }
   .ob-checkbox-row {
     flex-direction: row; align-items: center; gap: .6rem;
     font-size: .9rem; color: var(--ink); cursor: pointer;

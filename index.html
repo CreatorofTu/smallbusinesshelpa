@@ -32,6 +32,12 @@
   }
 
   * { box-sizing: border-box; }
+  /* Any element whose own rule sets display:flex/inline-flex/etc (.tertiary-link
+     here included) otherwise beats the UA-stylesheet [hidden] rule regardless
+     of source order -- real, confirmed bug found live 2026-07-23 (in
+     onboarding.html, same shared .tertiary-link convention) -- global
+     !important catch-all closes the whole class at once. */
+  [hidden] { display: none !important; }
   html, body { margin: 0; padding: 0; }
   body {
     background: var(--bg);
