@@ -1226,36 +1226,78 @@
     saveState();
   }
 
-  // ---------- Sticker QR deep link: /onboarding.html?sticker=N ----------
+  // ---------- Sticker QR deep link: /onboarding.html?sticker=N&business=<id> ----------
   // The mailed stickers are pre-printed QR codes; the phone's native camera
   // opens this URL — no camera code needed here.
   //
-  // CAVEAT (why typed entry is the promoted path in all on-screen copy):
-  // on iOS, a camera scan always opens Safari, and Safari's localStorage is
-  // SEPARATE from the installed home-screen app's — so a scan can land in a
-  // browser instance with none of the user's saved state. Typing the number
-  // inside the app always works. When the server exists, resolve scans
-  // server-side (look up the business by session/sticker) so the Safari
-  // instance works too — and pick the permanent URL before printing stickers.
+  // REAL FIX (2026-07-23): the same physical sticker has to route correctly
+  // to TWO different actors over its lifetime — the owner, while they're
+  // still walking around naming things, and every customer after that,
+  // forever. The old version only ever checked this device's own
+  // localStorage (`state.bindings`/`state.done`), which is right for the
+  // owner's own device mid-setup but silently wrong for anyone else: a
+  // customer's phone has none of that local state and would land on the
+  // owner's setup/intro screen instead of the real review page — a real,
+  // launch-blocking bug, not a hypothetical one. Fixed by asking the server
+  // (api/sticker-scan.js, public, unauthenticated, resolves by account+
+  // sticker-number) whenever the link carries a `business` id: bound ->
+  // redirect straight to review.html; not bound yet -> fall through to the
+  // existing owner-side flow below unchanged. A link with no `business`
+  // param (older-format, or same-device-already-matching-state) keeps the
+  // exact old behavior, so nothing already working breaks.
+  //
+  // CAVEAT (why typed entry is still the promoted path in all on-screen
+  // copy): on iOS, a camera scan always opens Safari, and Safari's
+  // localStorage is SEPARATE from the installed home-screen app's — so a
+  // scan can land in a browser instance with none of the owner's own saved
+  // state. Typing the number inside the app always works regardless.
   function handleStickerDeepLink() {
     const params = new URLSearchParams(location.search);
     const raw = params.get('sticker');
+    const business = params.get('business');
     if (raw == null) return;
     try { history.replaceState(null, '', location.pathname); } catch (err) {}
     const num = Math.floor(Number(raw));
     if (!(num >= 1 && num <= 100)) return;
-    if (state.done) {
-      const b = state.bindings[num];
-      $('global-status').textContent = b
-        ? 'Setup is complete — sticker ' + num + ' is on "' + b.name + '" and already working.'
-        : 'Setup is complete — sticker ' + num + ' is already working.';
-    } else if (state.inventorySubmitted) {
-      state.screen = 'stickers';
-      saveState();
-      setCurrentSticker(num);
-    } else {
-      $('global-status').textContent = 'Sticker ' + num + ' scanned — submit your walk-around list first, then scan it again.';
+
+    function ownerSideFallback() {
+      if (state.done) {
+        const b = state.bindings[num];
+        $('global-status').textContent = b
+          ? 'Setup is complete — sticker ' + num + ' is on "' + b.name + '" and already working.'
+          : 'Setup is complete — sticker ' + num + ' is already working.';
+      } else if (state.inventorySubmitted) {
+        state.screen = 'stickers';
+        saveState();
+        setCurrentSticker(num);
+      } else {
+        $('global-status').textContent = 'Sticker ' + num + ' scanned — submit your walk-around list first, then scan it again.';
+      }
     }
+
+    if (!business) {
+      ownerSideFallback();
+      return;
+    }
+
+    fetch('/api/sticker-scan?business=' + encodeURIComponent(business) + '&sticker=' + num)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.ok && data.bound && data.itemId) {
+          location.href = '/review.html?business=' + encodeURIComponent(business) + '&item=' + encodeURIComponent(data.itemId);
+          return;
+        }
+        // Not bound yet (or the lookup failed) — this is presumably the
+        // owner, still mid-setup, on their own device. Fall back to the
+        // existing local-state flow rather than showing an error, since a
+        // real customer scanning an unbound sticker is an edge case the
+        // owner's own "place stickers, then walk the list" process is
+        // meant to close quickly.
+        ownerSideFallback();
+      })
+      .catch(function () {
+        ownerSideFallback();
+      });
   }
 
   function mount() {
