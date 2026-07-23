@@ -1,5 +1,13 @@
 const { kv } = require('@vercel/kv');
+const { getSessionFromRequest } = require('./_session');
 
+// AUTHORIZATION: accountId is derived from the caller's signed session
+// cookie (see _session.js), never from the query string. This also closes a
+// separate exposure concern: accountId used to travel as a GET query param
+// (`?accountId=...`), which — since it was the only thing these endpoints
+// checked, i.e. it functioned as a bearer credential — was more likely to
+// land in access logs or browser history than the POST-body form the other
+// account-scoped endpoints used. The query string now carries only `today`.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DROP_THRESHOLD_PCT = 15;
@@ -55,6 +63,13 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      res.status(401).json({ error: 'Not logged in' });
+      return;
+    }
+    const accountId = session.accountId;
+
     const { today } = req.query || {};
 
     if (!today || typeof today !== 'string' || !DATE_RE.test(today)) {
@@ -66,7 +81,7 @@ module.exports = async function handler(req, res) {
     const thisWeekDates = windowDates(anchorMs, 6, 0);
     const lastWeekDates = windowDates(anchorMs, 13, 7);
 
-    const allDates = await kv.zrange('logdates', 0, -1);
+    const allDates = await kv.zrange(`logdates:${accountId}`, 0, -1);
     const dateList = Array.isArray(allDates) ? allDates : [];
     const relevantDates = dateList.filter(
       (date) => thisWeekDates.includes(date) || lastWeekDates.includes(date)
@@ -76,7 +91,7 @@ module.exports = async function handler(req, res) {
     // Promise.all rather than kv.mget, since mget's availability on the
     // @vercel/kv client wasn't confirmed.
     const entries = await Promise.all(
-      relevantDates.map((date) => kv.get(`logentry:${date}`))
+      relevantDates.map((date) => kv.get(`logentry:${accountId}:${date}`))
     );
 
     const entryByDate = new Map();

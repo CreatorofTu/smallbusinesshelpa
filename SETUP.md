@@ -23,13 +23,18 @@ VAPID_PUBLIC_KEY=<from .env.local>
 VAPID_PRIVATE_KEY=<from .env.local>
 VAPID_SUBJECT=<from .env.local>
 ADMIN_TOKEN=<from .env.local>
+SESSION_SECRET=<from .env.local>
 ```
 
 Notes on each:
 - **VAPID_PUBLIC_KEY** is also hardcoded in `index.html` (that's intentional and safe — it's the *public* half, meant to be visible client-side). If you ever rotate keys, update it in both places.
 - **VAPID_PRIVATE_KEY** must never appear in any committed file or client-side code — env var only.
 - **VAPID_SUBJECT** is a contact the push service can reach if it needs to flag abuse — a `mailto:` is standard; change it to whatever address you want to own this.
-- **ADMIN_TOKEN** gates `/api/send-push` (the real "a directive fired, notify everyone" endpoint) so a stranger who finds the URL can't use it as an open notification blaster. Whatever system eventually decides "a directive fired" needs to send this exact value as an `x-admin-token` header. Treat it like a password — rotate it if it ever leaks.
+- **ADMIN_TOKEN** gates `/api/send-push` and `/api/migrate-legacy-data` (real, privileged endpoints) so a stranger who finds the URL can't use them. Whatever system eventually decides "a directive fired" needs to send this exact value as an `x-admin-token` header. Treat it like a password — rotate it if it ever leaks.
+- **SESSION_SECRET** signs the HttpOnly login/signup session cookie (`api/_session.js`) that `log-entry`/`log-summary`/`save-profile`/`subscribe` now authenticate every request against, instead of trusting a client-supplied `accountId`. Generated locally the same way as the others (`openssl rand -hex 32`) — never commit it, never put it in client-side code. **Rotating it logs every currently-signed-in device out** (their cookie no longer verifies) — they just log back in.
+
+## Before the pilot business's first login after this deploy
+This deploy added real accounts — before this build, the one real pilot business (the founder's father's shop) had all its data under old, non-account-scoped global keys (`businessProfile`, `logentry:<date>`, `logdates`, `subscriptions`). `/api/migrate-legacy-data` copies that data into a real account (non-destructively — nothing is deleted from the old keys), but it is a **manual, one-time step** — see the curl example in that file's own header comment. **Run it, and give the resulting email/password to the pilot business, before they open this app again post-deploy.** If they instead land on the login screen and sign up fresh (or log in with credentials that don't match what the migration created), their real history will not appear — it isn't destroyed, but the app won't show it until the right account is used. This step could not be completed as part of this pass: it needs real production KV access and a real password to hand to a real person, both outside what this session can do.
 
 ## 5. Deploy
 Vercel deploys automatically once the repo is connected and env vars are set. Push to `main` to redeploy.

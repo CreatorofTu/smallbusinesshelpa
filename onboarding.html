@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Justaddegg</title>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#ffffff">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Justaddegg">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+
+<style>
+  @font-face {
+    font-family: 'Fustat';
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/Fustat-Variable.ttf') format('truetype-variations');
+  }
+
+  :root {
+    --bg: #ffffff;
+    --ink: #000000;
+    --ink-soft: #666666;
+    --line: #e0e0e0;
+    --font: 'Fustat', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+  }
+  main {
+    width: 100%;
+    max-width: 560px;
+    padding: 2rem 1.25rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wordmark {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.4rem;
+    padding: .5rem .75rem;
+    margin-left: -.75rem;
+  }
+  h1 {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.3rem;
+    line-height: 1.25;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h2 {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1.3;
+    margin: 0;
+  }
+  p {
+    margin: 0;
+    line-height: 1.55;
+    max-width: 62ch;
+  }
+  .soft { color: var(--ink-soft); font-size: .95rem; }
+
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%);
+  }
+  .card[hidden] { display: none; }
+
+  .screen { display: flex; flex-direction: column; gap: 1rem; }
+  .screen[hidden] { display: none; }
+
+  button {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1rem;
+    padding: .65rem 1.1rem;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    align-self: flex-start;
+    min-height: 44px; /* 44x44 minimum tap target */
+  }
+  button:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+  button:hover { border-color: var(--ink); }
+  button:disabled { opacity: .5; cursor: default; }
+
+  .status {
+    font-size: .9rem;
+    color: var(--ink-soft);
+    min-height: 1.2em;
+  }
+
+  form { display: flex; flex-direction: column; gap: .85rem; }
+  label, .field-label { display: flex; flex-direction: column; gap: .35rem; font-size: .85rem; color: var(--ink-soft); }
+  input, textarea {
+    font-size: 16px;
+    padding: .55em .65em;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    width: 100%;
+  }
+  textarea { resize: vertical; min-height: 5.5em; line-height: 1.45; }
+  input:focus-visible, textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  input:disabled { opacity: .45; }
+
+  .ob-progress { font-size: .8rem; color: var(--ink-soft); }
+
+  .tertiary-link {
+    background: none; border: none; color: var(--ink-soft); text-decoration: underline;
+    font-family: var(--font); font-size: .85rem; cursor: pointer; padding: .3em .2em;
+    align-self: flex-start;
+    min-height: 44px; display: inline-flex; align-items: center; /* full-size tap target for the way back */
+  }
+  .tertiary-link:hover { color: var(--ink); }
+  .tertiary-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+
+  .ob-toggle { display: flex; gap: .6rem; }
+  .ob-toggle-opt {
+    flex: 1; font-family: var(--font); font-weight: 700; font-size: 1.05rem;
+    padding: .9rem 1rem; border-radius: 10px; border: 1px solid var(--line);
+    background: transparent; color: var(--ink-soft); cursor: pointer; align-self: auto;
+  }
+  .ob-toggle-opt.selected { border-color: var(--ink); color: var(--ink); background: var(--line); }
+  .ob-toggle-opt:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .manual-list { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .55rem; line-height: 1.5; }
+  .package-list { margin: 0; padding-left: 1.2rem; line-height: 1.7; }
+
+  .inv-rows { display: flex; flex-direction: column; gap: .6rem; }
+  .inv-row { display: flex; gap: .5rem; align-items: center; }
+  .inv-row input[data-kind="name"] { flex: 1; }
+  .inv-row input[data-kind="count"] { width: 5.2em; flex: none; text-align: center; }
+  .inv-remove {
+    flex: none; background: none; border: none; color: var(--ink-soft); cursor: pointer;
+    font-size: 1.2rem; padding: .2rem .45rem; align-self: auto; line-height: 1; font-weight: 400;
+    min-height: 44px; min-width: 44px; display: flex; align-items: center; justify-content: center; /* delete sits next to an input — make the miss impossible */
+  }
+  .inv-remove:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+  .inv-add {
+    font-family: var(--font); font-weight: 700; font-size: .95rem;
+    padding: .8rem 1rem; border-radius: 10px; border: 1px dashed var(--line);
+    background: transparent; color: var(--ink-soft); cursor: pointer; align-self: stretch;
+  }
+  .inv-add:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .sticker-banner {
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 1rem 1.2rem;
+    text-align: center;
+    font-weight: 700;
+    font-size: 1.15rem;
+  }
+  .sticker-banner .soft { display: block; font-weight: 400; margin-top: .3rem; }
+  .item-list { display: flex; flex-direction: column; gap: .6rem; }
+  .item-btn {
+    display: flex; justify-content: space-between; align-items: center; gap: .75rem;
+    width: 100%; align-self: stretch; text-align: left;
+    padding: .95rem 1.1rem; border-radius: 10px;
+  }
+  .item-btn .item-left { font-weight: 700; font-size: 1.05rem; }
+  .item-btn .item-count { font-weight: 400; font-size: .9rem; color: var(--ink-soft); white-space: nowrap; }
+  .item-btn.item-done { opacity: .45; }
+  .sticker-manual { display: flex; gap: .5rem; align-items: center; }
+  .sticker-manual input { width: 6.5em; flex: none; text-align: center; }
+
+  .day-card {
+    border: 1px solid var(--line); border-radius: 10px; padding: .8rem .9rem;
+    display: flex; flex-direction: column; gap: .6rem;
+  }
+  .day-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+  .day-name { font-weight: 700; font-size: 1rem; }
+  .day-toggle { display: flex; gap: .4rem; }
+  .day-toggle .ob-toggle-opt { font-size: .9rem; padding: .55rem .9rem; flex: none; }
+  .day-times { display: flex; gap: .6rem; align-items: center; }
+  .day-times label { flex: 1; }
+  .day-list { display: flex; flex-direction: column; gap: .7rem; }
+</style>
+</head>
+<body>
+<main>
+  <div class="header-row">
+    <span class="wordmark">Justaddegg</span>
+  </div>
+  <div class="status" id="global-status"></div>
+
+  <!-- ============ Screen 0: What we are ============ -->
+  <section class="screen" id="screen-intro" hidden>
+    <div class="card">
+      <h1>What we are</h1>
+      <p>We are a startup. Our mission is to give small businesses the opportunity to grow faster using ai power.</p>
+      <p class="soft">Three steps, and your physical setup arrives within 24 hours of signup.</p>
+      <button type="button" id="intro-start">Get started</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 0.5: Sign up / log in ============ -->
+  <section class="screen" id="screen-auth" hidden>
+    <div class="card">
+      <h1 id="auth-heading">Create your account</h1>
+      <p class="soft" id="auth-subhead">You'll use this to get back into your setup anytime.</p>
+      <form id="auth-form" novalidate>
+        <label>Email
+          <input type="email" id="auth-email" autocomplete="email" required>
+        </label>
+        <label>Password
+          <input type="password" id="auth-password" autocomplete="new-password" minlength="6" required>
+        </label>
+        <button type="submit" id="auth-submit">Create account</button>
+      </form>
+      <div class="status" id="auth-status"></div>
+      <button type="button" class="tertiary-link" id="auth-toggle-visibility">Show password</button>
+      <button type="button" class="tertiary-link" id="auth-mode-toggle">Already started? Log in instead</button>
+      <button type="button" class="tertiary-link" id="auth-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 1: Getting started + pay ============ -->
+  <section class="screen" id="screen-setup" hidden>
+    <div class="card">
+      <div class="ob-progress">Step 1 of 3</div>
+      <h1>Getting started</h1>
+      <p class="soft">A few fast questions. Then we send your setup to your door.</p>
+      <form id="setup-form">
+        <label>Name of business
+          <input type="text" id="setup-business" autocomplete="organization" required>
+        </label>
+        <label>Name of owner
+          <input type="text" id="setup-owner" autocomplete="name" required>
+        </label>
+        <label>Address of the place of operation (restaurant, cafe)
+          <input type="text" id="setup-address" autocomplete="street-address" required>
+          <span class="soft">Our product will not work anywhere else.</span>
+        </label>
+        <label>Core product sold
+          <input type="text" id="setup-product" placeholder="Chicken" required>
+          <span class="soft">Example: what would a customer say when describing you? "The chicken restaurant." Even though you sell other things, you probably sell chicken at your core.</span>
+        </label>
+        <button type="submit" id="setup-pay">Pay $20 for your ai infrastructure package</button>
+      </form>
+      <div class="status" id="setup-status"></div>
+      <button type="button" class="tertiary-link" id="setup-paid-confirm" hidden>I've paid — continue</button>
+      <button type="button" class="tertiary-link" id="setup-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 2a: Package on the way + manual preview ============ -->
+  <section class="screen" id="screen-package" hidden>
+    <div class="card">
+      <div class="ob-progress">Step 2 of 3</div>
+      <h1>Your package is on the way</h1>
+      <p>Within 24 hours you will receive, at the provided address:</p>
+      <ul class="package-list">
+        <li>100 ai stickers</li>
+        <li>Instructions on how to integrate ai into your restaurant/cafe</li>
+      </ul>
+      <label>Delivery address (change it here if the package should go somewhere else — optional)
+        <input type="text" id="package-address" autocomplete="street-address">
+      </label>
+      <div class="status" id="package-status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Set up instruction manual</h2>
+      <p>Now for the fun part — it's time to add ai into your business.</p>
+      <ol class="manual-list">
+        <li>You or an employee needs to walk around your business and write down everything. Yes, everything. (E.g. doors, bathrooms, tables, speakers, spotlights, fireplaces, coat racks — literally everything.) It's essential for you to get the most out of our ai.</li>
+        <li>Once done naming and counting everything (e.g. 3 tables and 12 chairs and 2 speakers), we will process your list. Click submit.</li>
+        <li>Place a sticker on everything in this list — it'll be everything. Make sure the stickers are easily viewable.</li>
+        <li>Once done placing stickers, take your phone and scan every sticker, then tap the name of the item. The count will decrease as you go (3 tables mentioned, 2 tables left, 1 table left as you scan then assign).</li>
+      </ol>
+      <p class="soft">Tip: every sticker has its number printed on it — typing the number in this app works just as well as scanning.</p>
+      <button type="button" id="package-continue">Start the walk-around list</button>
+      <button type="button" class="tertiary-link" id="package-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 2b: Inventory builder ============ -->
+  <section class="screen" id="screen-inventory" hidden>
+    <div class="card">
+      <div class="ob-progress">Step 2 of 3</div>
+      <h1>Write down everything</h1>
+      <p class="soft">Walk around your business and list every item with its count. E.g. 3 tables, 12 chairs, 2 speakers.</p>
+      <div class="inv-rows" id="inv-rows"></div>
+      <button type="button" class="inv-add" id="inv-add">+ Add another item</button>
+      <button type="button" id="inv-submit">Submit</button>
+      <div class="status" id="inv-status"></div>
+      <button type="button" class="tertiary-link" id="inv-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 2c: Sticker assign ============ -->
+  <section class="screen" id="screen-stickers" hidden>
+    <div class="card">
+      <div class="ob-progress">Step 2 of 3</div>
+      <h1>Place and scan your stickers</h1>
+      <p class="soft">Put a sticker on each item, type the sticker's number below, then tap the item's name. (Scanning the sticker's QR code works too.)</p>
+      <p class="soft">No stickers yet? They arrive within 24 hours — this screen will be waiting right here when they do.</p>
+      <div class="sticker-banner" id="sticker-banner"></div>
+      <div class="sticker-manual">
+        <input type="number" id="sticker-number" inputmode="numeric" min="1" max="100" placeholder="No.">
+        <button type="button" id="sticker-use">Use this sticker</button>
+      </div>
+      <div class="status" id="sticker-status"></div>
+      <div class="item-list" id="sticker-items"></div>
+      <button type="button" id="sticker-continue" hidden>Continue</button>
+      <button type="button" class="tertiary-link" id="sticker-continue-anyway">My stickers haven't arrived yet — continue, I'll come back to place them</button>
+      <button type="button" class="tertiary-link" id="sticker-back">Back to my list</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 3: Core product questions ============ -->
+  <section class="screen" id="screen-product" hidden>
+    <div class="card">
+      <div class="ob-progress">Step 3 of 3</div>
+      <h1 id="product-heading">Time to tell the ai what makes you special</h1>
+      <form id="product-form">
+        <label>1. What type?
+          <input type="text" id="product-type" placeholder="Eggo, Belgian, Brioche, Buttermilk?" required>
+        </label>
+        <div class="field-label">2. Is it served hot or cold?
+          <div class="ob-toggle" id="product-temp">
+            <button type="button" class="ob-toggle-opt" data-opt="Hot">Hot</button>
+            <button type="button" class="ob-toggle-opt" data-opt="Cold">Cold</button>
+          </div>
+        </div>
+        <label>3. What toppings/sides are usually included with it?
+          <input type="text" id="product-toppings" required>
+        </label>
+        <label>4. Any other significant items that could've been here? Matcha tea? (Optional)
+          <input type="text" id="product-extras">
+        </label>
+        <label>5. The most important part (this stays between you and the ai, NEVER US — it's saved locally to your account, and we will never ever share this): define the recipe, ingredients only right now. We assume you have best food practices, so we won't ask anything else past that.
+          <textarea id="product-recipe" placeholder="One ingredient per line" required></textarea>
+        </label>
+        <button type="submit">Continue</button>
+      </form>
+      <div class="status" id="product-status"></div>
+      <button type="button" class="tertiary-link" id="product-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 4: 7-day schedule ============ -->
+  <section class="screen" id="screen-schedule" hidden>
+    <div class="card">
+      <div class="ob-progress">Step 3 of 3</div>
+      <h1>Last question before we allow ai to support you</h1>
+      <p>What is your schedule across a 7 day week?</p>
+      <p class="soft">Select open days, closed days, and start and close times. Outside these hours, the ai stickers won't be available.</p>
+      <div class="day-list" id="day-list"></div>
+      <button type="button" id="schedule-continue">Finish setup</button>
+      <div class="status" id="schedule-status"></div>
+      <button type="button" class="tertiary-link" id="schedule-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 5: Done ============ -->
+  <section class="screen" id="screen-done" hidden>
+    <div class="card">
+      <h1>That's it! You're done! All set up.</h1>
+      <p>Our ai will learn your restaurant and return in exactly one week from now. Now all you have to do is bring in as many customers as you can, to develop your baseline for how your business performs in a 7 day week.</p>
+      <p class="soft" id="done-sticker-reminder" hidden>Some items on your list don't have stickers yet. When your stickers arrive, open this page and finish placing them.</p>
+      <div class="status" id="done-status"></div>
+      <button type="button" id="done-open-app">Open your app</button>
+      <button type="button" class="tertiary-link" id="done-back">Back</button>
+    </div>
+  </section>
+</main>
+
+<script>
+  // Real Stripe Payment Link — $20 "ai infrastructure package" charge.
+  const PAYMENT_LINK = 'https://buy.stripe.com/eVq00l3uv64S57R6ep9k400';
+
+  // ============================================================
+  // SERVER SEAM — /api/save-profile.js is now real (account-scoped,
+  // key profile:<accountId>). It replaces what used to be six separate
+  // not-yet-built endpoint stubs (onboarding-setup / -payment / -inventory /
+  // -sticker / -schedule / -complete) — this was the one real reconciliation
+  // needed between onboarding.html's own API seam and the actual server
+  // file: there is only one real endpoint now, and every step below posts
+  // to it with just the section it owns; save-profile.js merges sections
+  // into the account's stored profile rather than overwriting the whole
+  // thing each time.
+  //
+  // Every call still requires a real account, established via the signed
+  // session cookie AUTH_API sets on sign up / log in (see below) — and is
+  // still best-effort (try/catch): the page never blocks on the server, and
+  // everything works fully client-side even if a save silently fails.
+  //
+  // AUTHORIZATION: these payloads no longer carry accountId. save-profile.js
+  // now derives the account from the caller's signed session cookie (sent
+  // automatically with `credentials: 'same-origin'` below), never from a
+  // client-supplied id — previously accountId in the body was the only thing
+  // checked, so anyone who obtained another business's accountId could
+  // overwrite that business's profile.
+  //
+  // PRIVACY — DELIBERATE: the recipe (state.product.recipe) is EXCLUDED
+  // from every payload below. The on-screen promise says the recipe
+  // "stays between you and the ai, NEVER US" — this exclusion is what
+  // keeps that promise true. Never add the recipe to any server payload.
+  // ============================================================
+  function accountId() {
+    return state.account ? state.account.id : null;
+  }
+
+  const API = {
+    async post(path, body) {
+      try {
+        await fetch(path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+      } catch (err) {
+        // Quiet failure — the flow continues without the server.
+      }
+    },
+    saveSetup() {
+      return this.post('/api/save-profile', {
+        setup: {
+          businessName: state.setup.businessName,
+          ownerName: state.setup.ownerName,
+          address: state.setup.address,
+          coreProduct: state.setup.coreProduct,
+        },
+        deliveryAddress: state.deliveryAddress,
+      });
+    },
+    recordPayment(mode) {
+      // No real payment/billing endpoint exists yet (out of scope for the
+      // account-scoping build) — kept as the same best-effort stub it
+      // always was. accountId() is still passed here since /api/onboarding-
+      // payment doesn't exist yet and so was never touched by the session
+      // migration — whenever it's built, it should authenticate the same way
+      // every other real endpoint now does (session cookie, not this field).
+      return this.post('/api/onboarding-payment', { accountId: accountId(), amount: 10, mode: mode });
+    },
+    submitInventory() {
+      return this.post('/api/save-profile', { inventory: state.inventory });
+    },
+    saveStickerBinding(sticker, itemId, itemName) {
+      // Keyed by the item's stable id (never its list position) so server
+      // data stays correct even if the list is edited later.
+      return this.post('/api/save-profile', {
+        stickerBinding: { sticker: sticker, itemId: itemId, itemName: itemName },
+      });
+    },
+    saveSchedule() {
+      return this.post('/api/save-profile', { schedule: state.schedule });
+    },
+    completeOnboarding() {
+      // Recipe deliberately omitted — see the seam-wide privacy note above.
+      return this.post('/api/save-profile', {
+        setup: {
+          businessName: state.setup.businessName,
+          ownerName: state.setup.ownerName,
+          address: state.setup.address,
+          coreProduct: state.setup.coreProduct,
+        },
+        deliveryAddress: state.deliveryAddress,
+        product: {
+          type: state.product.type,
+          temp: state.product.temp,
+          toppings: state.product.toppings,
+          extras: state.product.extras,
+        },
+        schedule: state.schedule,
+        stickerCount: Object.keys(state.bindings).length,
+        completed: true,
+      });
+    },
+  };
+
+  // ============================================================
+  // AUTH SEAM — /api/auth-signup and /api/auth-login are now REAL (real
+  // account records at account:<email>, bcrypt-hashed passwords, real
+  // accountIds). This object keeps the same shape it always had — the only
+  // change is what counts as a "fallback" case.
+  //
+  // The local-pseudo-account fallback (localFallback(), below) only ever
+  // fires for SIGNUP, and only when the request itself never reached the
+  // server (a thrown fetch — offline, DNS failure, etc.) — there's no real
+  // account yet at signup time, so a fabricated local identity can't
+  // silently diverge from one. LOGIN never falls back to a fabricated
+  // identity, even on a genuine network failure: a real account may already
+  // exist there with real server-side history, and result.ok reading true
+  // either way would hide that a fake, empty identity just got substituted
+  // for it with no error shown. A real response from the server — a 409
+  // (signup: email already exists) or a 401 (login: wrong email/password) —
+  // is a REAL answer either way, not a reason to fall back; it must be shown
+  // to the user, not silently bypassed. Silently falling back on a real
+  // 401/409 would mean a typo'd password quietly hands out a brand-new
+  // disconnected local identity instead of telling the owner they got it
+  // wrong.
+  //
+  // PASSWORD HANDLING — deliberate: the password is read once from the
+  // input, passed by value into signUp()/logIn() to (eventually) forward to
+  // the server, and then discarded by its caller. It is never written to
+  // state, never passed to saveState()/localStorage, and never logged. Only
+  // the email + a generated id live in state.account.
+  // ============================================================
+  function genAccountId() {
+    return 'acct-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function localFallback(email) {
+    // Reuse this device's existing local account id if it already matches
+    // this email (e.g. Back then resubmitting) instead of silently minting
+    // a second id for the same session.
+    if (state.account && state.account.email === email) {
+      return { ok: true, id: state.account.id, email: email, local: true };
+    }
+    return { ok: true, id: genAccountId(), email: email, local: true };
+  }
+
+  const AUTH_API = {
+    async signUp(email, password) {
+      let res;
+      try {
+        res = await fetch('/api/auth-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin', // accept the session cookie the server sets on success
+          body: JSON.stringify({ email: email, password: password }),
+        });
+      } catch (err) {
+        // Real network failure (offline, etc.) — never block signup on a
+        // backend that couldn't be reached at all. Low-risk here (unlike
+        // login below) since there's no real existing account yet to
+        // silently diverge from.
+        return localFallback(email);
+      }
+      if (res.ok) {
+        try {
+          const data = await res.json();
+          return { ok: true, id: data.accountId, email: data.email || email, completed: !!data.completed };
+        } catch (parseErr) {
+          // 200 with an unparseable body — treat like any other failure to
+          // reach a good answer rather than silently hanging with the submit
+          // button disabled forever.
+          return { ok: false, error: 'Something went wrong — try again.', status: res.status };
+        }
+      }
+      // A real server response — 409 (already exists) or a validation 400 —
+      // is a real answer, not a fallback case. Surface it.
+      let message = 'Something went wrong — try again.';
+      try {
+        const errData = await res.json();
+        if (errData && errData.error) message = errData.error;
+      } catch (parseErr) {}
+      return { ok: false, error: message, status: res.status };
+    },
+    async logIn(email, password) {
+      let res;
+      try {
+        res = await fetch('/api/auth-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin', // accept the session cookie the server sets on success
+          body: JSON.stringify({ email: email, password: password }),
+        });
+      } catch (err) {
+        // Real network failure on LOGIN — unlike signup, a real account may
+        // already exist here with real server-side history. Falling back to
+        // a fabricated local identity would silently and permanently hide
+        // that history on this device with no error ever shown (result.ok
+        // would read true either way). Surface a real, visible error instead
+        // and let the user retry once they're back online.
+        return { ok: false, error: "Couldn't reach the server — check your connection and try again.", networkError: true };
+      }
+      if (res.ok) {
+        try {
+          const data = await res.json();
+          return { ok: true, id: data.accountId, email: data.email || email, completed: !!data.completed };
+        } catch (parseErr) {
+          return { ok: false, error: 'Something went wrong — try again.', status: res.status };
+        }
+      }
+      // A real 401 (wrong email/password) or 429 (rate-limited) is a real
+      // answer — never silently bypass it with a local identity.
+      let message = 'Something went wrong — try again.';
+      try {
+        const errData = await res.json();
+        if (errData && errData.error) message = errData.error;
+      } catch (parseErr) {}
+      return { ok: false, error: message, status: res.status };
+    },
+  };
+
+  const STATE_KEY = 'jaeOnboarding';
+  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  // Every inventory row gets a stable id at creation. Sticker bindings key
+  // off this id — never the row's position in the array — so editing the
+  // list later (removing/reordering rows) can never silently repoint a
+  // sticker at the wrong item.
+  function genItemId() {
+    return 'itm-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  }
+  function newInventoryRow() {
+    return { id: genItemId(), name: '', count: '' };
+  }
+
+  function defaultState() {
+    return {
+      screen: 'intro',
+      account: null,          // { id, email } — set on sign up / log in. Password is NEVER stored here or anywhere.
+      setup: { businessName: '', ownerName: '', address: '', coreProduct: '' },
+      paid: false,
+      paymentStarted: false,   // the payment page was opened at least once
+      deliveryAddress: '',
+      inventory: [newInventoryRow()],
+      inventorySubmitted: false,
+      bindings: {},            // sticker number -> { id, name } (id = inventory row's stable id)
+      currentSticker: null,
+      product: { type: '', temp: '', toppings: '', extras: '', recipe: '' },
+      schedule: DAYS.map(function (day) {
+        return { day: day, open: true, start: '09:00', end: '17:00' };
+      }),
+      done: false,
+    };
+  }
+
+  let state = loadState();
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STATE_KEY);
+      if (!raw) return defaultState();
+      const saved = JSON.parse(raw);
+      const base = defaultState();
+      for (const key in base) {
+        if (saved && Object.prototype.hasOwnProperty.call(saved, key)) base[key] = saved[key];
+      }
+      if (!Array.isArray(base.inventory) || base.inventory.length === 0) base.inventory = [newInventoryRow()];
+      if (!Array.isArray(base.schedule) || base.schedule.length !== 7) base.schedule = defaultState().schedule;
+      // Give any row saved before ids existed a stable id.
+      base.inventory.forEach(function (row) {
+        if (row && !row.id) row.id = genItemId();
+      });
+      // Migrate old index-keyed bindings to id-keyed, then drop any binding
+      // whose item no longer exists.
+      if (base.bindings && typeof base.bindings === 'object') {
+        for (const key in base.bindings) {
+          const b = base.bindings[key];
+          if (b && b.id == null && typeof b.index === 'number') {
+            const it = base.inventory[b.index];
+            if (it) base.bindings[key] = { id: it.id, name: it.name };
+            else delete base.bindings[key];
+          }
+        }
+        for (const key in base.bindings) {
+          const b2 = base.bindings[key];
+          if (!b2 || !base.inventory.some(function (row) { return row.id === b2.id; })) {
+            delete base.bindings[key];
+          }
+        }
+      } else {
+        base.bindings = {};
+      }
+      return base;
+    } catch (err) {
+      return defaultState();
+    }
+  }
+
+  function saveState() {
+    try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (err) {}
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  const $ = function (id) { return document.getElementById(id); };
+
+  const SCREENS = ['intro', 'auth', 'setup', 'package', 'inventory', 'stickers', 'product', 'schedule', 'done'];
+  // Everything from Step 1 onward requires an account. A direct deep link
+  // (or any other way of landing on one of these screens without having
+  // gone through auth) gets bounced back to screen-auth — see render().
+  const POST_AUTH_SCREENS = ['setup', 'package', 'inventory', 'stickers', 'product', 'schedule', 'done'];
+
+  function go(screen) {
+    state.screen = screen;
+    saveState();
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- Sticker math (remaining counts derived, never duplicated) ----------
+  function assignedCount(itemId) {
+    let n = 0;
+    for (const key in state.bindings) {
+      if (state.bindings[key].id === itemId) n += 1;
+    }
+    return n;
+  }
+  function remainingCount(item) {
+    if (!item) return 0;
+    return Math.max(0, Number(item.count || 0) - assignedCount(item.id));
+  }
+  // After the inventory list is edited and re-submitted: drop bindings whose
+  // item was removed, refresh names on the rest. Returns how many were dropped.
+  function reconcileBindings() {
+    let dropped = 0;
+    for (const key in state.bindings) {
+      const b = state.bindings[key];
+      const item = state.inventory.find(function (row) { return row.id === b.id; });
+      if (!item) {
+        delete state.bindings[key];
+        dropped += 1;
+      } else {
+        b.name = item.name;
+      }
+    }
+    return dropped;
+  }
+
+  // ---------- Screen 0.5: auth ----------
+  let authMode = 'signup'; // 'signup' | 'login' — not persisted, resets to signup on reload; this is a seam, not real session state.
+
+  function fillAuthScreen() {
+    if (authMode === 'signup') {
+      $('auth-heading').textContent = 'Create your account';
+      $('auth-subhead').textContent = "You'll use this to get back into your setup anytime.";
+      $('auth-submit').textContent = 'Create account';
+      $('auth-mode-toggle').textContent = 'Already started? Log in instead';
+    } else {
+      $('auth-heading').textContent = 'Log in';
+      $('auth-subhead').textContent = 'Enter the email and password you used before.';
+      $('auth-submit').textContent = 'Log in';
+      $('auth-mode-toggle').textContent = 'New here? Create an account instead';
+    }
+    if (state.account && !$('auth-email').value) $('auth-email').value = state.account.email;
+  }
+
+  function handleAuthModeToggle() {
+    authMode = authMode === 'signup' ? 'login' : 'signup';
+    $('auth-status').textContent = '';
+    fillAuthScreen();
+  }
+
+  function handleAuthVisibilityToggle() {
+    const input = $('auth-password');
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    $('auth-toggle-visibility').textContent = showing ? 'Show password' : 'Hide password';
+  }
+
+  async function handleAuthSubmit(e) {
+    e.preventDefault();
+    const email = $('auth-email').value.trim();
+    let password = $('auth-password').value; // read once — never saved, see AUTH_API's seam note above.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      $('auth-status').textContent = 'Enter a valid email address.';
+      return;
+    }
+    if (password.length < 6) {
+      $('auth-status').textContent = 'Password needs to be at least 6 characters.';
+      return;
+    }
+    $('auth-submit').disabled = true;
+    $('auth-status').textContent = authMode === 'signup' ? 'Creating your account…' : 'Logging in…';
+    const result = authMode === 'signup'
+      ? await AUTH_API.signUp(email, password)
+      : await AUTH_API.logIn(email, password);
+    password = ''; // discard — nothing above stored it, this just clears the local reference.
+    $('auth-submit').disabled = false;
+    if (result && result.ok) {
+      state.account = { id: result.id, email: email };
+      saveState();
+      // index.html reads this stable key after onboarding.html redirects it
+      // back — see index.html's getAccountId(). Written here (not just at
+      // finishOnboarding) so a returning "log in" also re-establishes it
+      // immediately, without requiring a full re-run of onboarding.
+      try {
+        localStorage.setItem('jaeAccountId', result.id);
+        localStorage.setItem('jaeAccountEmail', email);
+      } catch (err) {}
+      // A LOGIN (never a fresh signup) whose account already has a
+      // completed server-side profile means this owner already finished the
+      // whole wizard once, possibly on a different device — send them
+      // straight back into the real app instead of re-running all 6 steps
+      // from Step 1. Without this, the screen's own copy ("You'll use this
+      // to get back into your setup anytime") wasn't true: every login on a
+      // fresh device landed back at screen-setup regardless.
+      if (authMode === 'login' && result.completed) {
+        try {
+          localStorage.setItem('partnerModeOnboardingComplete', '1');
+        } catch (err) {}
+        location.href = '/index.html';
+        return;
+      }
+      go('setup');
+    } else {
+      // Real server answer (409 already-exists, 401 wrong credentials, 429
+      // rate-limited, or a validation 400) — show it, don't silently retry
+      // or proceed. A genuine network failure on signup reaches
+      // localFallback() above, which always returns ok:true; on login it
+      // returns ok:false with a visible "couldn't reach the server" message
+      // instead (see AUTH_API.logIn's own note).
+      $('auth-status').textContent = (result && result.error) || 'Something went wrong — try again.';
+    }
+  }
+
+  // ---------- Screen 1: setup + pay ----------
+  function fillSetupForm() {
+    $('setup-business').value = state.setup.businessName;
+    $('setup-owner').value = state.setup.ownerName;
+    $('setup-address').value = state.setup.address;
+    $('setup-product').value = state.setup.coreProduct;
+    // Survive a reload after the payment page was opened: keep the
+    // "I've paid — continue" path visible so nobody is pushed to pay twice.
+    $('setup-paid-confirm').hidden = !(state.paymentStarted && !state.paid);
+    if (state.paymentStarted && !state.paid) {
+      $('setup-status').textContent = 'Already paid on the payment page? Tap "I\'ve paid — continue" below.';
+    }
+    $('setup-pay').textContent = state.paid
+      ? 'Continue'
+      : 'Pay $20 for your ai infrastructure package';
+  }
+
+  function readSetupForm() {
+    state.setup.businessName = $('setup-business').value.trim();
+    state.setup.ownerName = $('setup-owner').value.trim();
+    state.setup.address = $('setup-address').value.trim();
+    state.setup.coreProduct = $('setup-product').value.trim();
+    if (!state.deliveryAddress) state.deliveryAddress = state.setup.address;
+    saveState();
+  }
+
+  function handleSetupSubmit(e) {
+    e.preventDefault();
+    readSetupForm();
+    API.saveSetup();
+    if (state.paid) { go('package'); return; }
+    if (PAYMENT_LINK) {
+      state.paymentStarted = true;
+      saveState();
+      window.open(PAYMENT_LINK, '_blank');
+      $('setup-status').textContent = 'A payment page just opened. Come back here when you are done.';
+      $('setup-paid-confirm').hidden = false;
+    } else {
+      // No hosted payment link connected yet — nothing is silently faked.
+      $('setup-status').textContent = 'Payment link not connected yet (test mode)';
+      state.paid = true;
+      saveState();
+      API.recordPayment('test-mode');
+      setTimeout(function () { go('package'); }, 1100);
+    }
+  }
+
+  function handlePaidConfirm() {
+    state.paid = true;
+    saveState();
+    API.recordPayment('payment-link');
+    go('package');
+  }
+
+  // ---------- Screen 2a: package ----------
+  function fillPackageScreen() {
+    $('package-address').value = state.deliveryAddress || state.setup.address;
+  }
+  function handlePackageAddressInput(e) {
+    state.deliveryAddress = e.target.value.trim();
+    saveState();
+    $('package-status').textContent = 'Delivery address saved.';
+  }
+
+  // ---------- Screen 2b: inventory ----------
+  function renderInventoryRows() {
+    const rows = state.inventory;
+    let html = '';
+    rows.forEach(function (row, i) {
+      html += '<div class="inv-row">' +
+        '<input type="text" data-kind="name" data-i="' + i + '" placeholder="e.g. Tables" value="' + escapeHtml(row.name) + '">' +
+        '<input type="number" data-kind="count" data-i="' + i + '" inputmode="numeric" min="1" step="1" placeholder="How many" value="' + escapeHtml(row.count) + '">' +
+        (rows.length > 1 ? '<button type="button" class="inv-remove" data-i="' + i + '" aria-label="Remove this item">&times;</button>' : '') +
+      '</div>';
+    });
+    $('inv-rows').innerHTML = html;
+
+    $('inv-rows').querySelectorAll('input[data-kind="name"]').forEach(function (input) {
+      input.addEventListener('input', function (e) {
+        rows[Number(e.target.getAttribute('data-i'))].name = e.target.value;
+        saveState();
+      });
+    });
+    $('inv-rows').querySelectorAll('input[data-kind="count"]').forEach(function (input) {
+      input.addEventListener('input', function (e) {
+        rows[Number(e.target.getAttribute('data-i'))].count = e.target.value;
+        saveState();
+      });
+    });
+    $('inv-rows').querySelectorAll('.inv-remove').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        rows.splice(Number(e.currentTarget.getAttribute('data-i')), 1);
+        saveState();
+        renderInventoryRows();
+      });
+    });
+  }
+
+  function handleInventoryAdd() {
+    state.inventory.push({ name: '', count: '' });
+    saveState();
+    renderInventoryRows();
+    const inputs = $('inv-rows').querySelectorAll('input[data-kind="name"]');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }
+
+  function handleInventorySubmit() {
+    // A half-filled row is a mistake, not noise — point at it instead of
+    // silently deleting the user's work. (Fully empty spare rows are fine.)
+    for (let i = 0; i < state.inventory.length; i++) {
+      const row = state.inventory[i];
+      const hasName = row.name.trim() !== '';
+      const hasCount = Number(row.count) > 0;
+      if (hasName && !hasCount) {
+        $('inv-status').textContent = '"' + row.name.trim() + '" needs a number — how many?';
+        return;
+      }
+      if (!hasName && hasCount) {
+        $('inv-status').textContent = 'One row has a count but no name — what is the item?';
+        return;
+      }
+    }
+    const cleaned = state.inventory.filter(function (row) {
+      return row.name.trim() !== '' && Number(row.count) > 0;
+    }).map(function (row) {
+      return { id: row.id || genItemId(), name: row.name.trim(), count: Math.floor(Number(row.count)) };
+    });
+    if (cleaned.length === 0) {
+      $('inv-status').textContent = 'Add at least one item with a count first.';
+      return;
+    }
+    $('inv-status').textContent = '';
+    state.inventory = cleaned;
+    state.inventorySubmitted = true;
+    const dropped = reconcileBindings();
+    saveState();
+    API.submitInventory();
+    go('stickers');
+    if (dropped > 0) {
+      $('sticker-status').textContent = dropped === 1
+        ? '1 sticker was on an item you removed — that sticker is free to use again.'
+        : dropped + ' stickers were on items you removed — those stickers are free to use again.';
+    }
+  }
+
+  // ---------- Screen 2c: stickers ----------
+  function renderStickerScreen() {
+    const banner = $('sticker-banner');
+    if (state.currentSticker != null) {
+      banner.innerHTML = 'Sticker ' + escapeHtml(state.currentSticker) + ' in hand' +
+        '<span class="soft">Tap the item this sticker is on.</span>';
+    } else {
+      banner.innerHTML = 'Enter a sticker number' +
+        '<span class="soft">Type the number printed on the sticker below. (Scanning its QR code works too.)</span>';
+    }
+
+    let html = '';
+    state.inventory.forEach(function (item, i) {
+      const left = remainingCount(item);
+      const total = Number(item.count || 0);
+      const doneCls = left === 0 ? ' item-done' : '';
+      const countText = left === 0
+        ? 'all done'
+        : left + ' of ' + total + ' left';
+      html += '<button type="button" class="item-btn' + doneCls + '" data-i="' + i + '">' +
+        '<span class="item-left">' + escapeHtml(item.name) + '</span>' +
+        '<span class="item-count">' + escapeHtml(countText) + '</span>' +
+      '</button>';
+    });
+    $('sticker-items').innerHTML = html;
+
+    $('sticker-items').querySelectorAll('.item-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        handleItemTap(Number(e.currentTarget.getAttribute('data-i')));
+      });
+    });
+
+    const allDone = state.inventory.every(function (item) { return remainingCount(item) === 0; });
+    $('sticker-continue').hidden = !allDone;
+    $('sticker-continue-anyway').hidden = allDone;
+  }
+
+  function setCurrentSticker(n) {
+    const num = Math.floor(Number(n));
+    if (!(num >= 1 && num <= 100)) {
+      $('sticker-status').textContent = 'Sticker numbers run 1 to 100 — check the sticker and try again.';
+      return;
+    }
+    state.currentSticker = num;
+    saveState();
+    if (state.bindings[num]) {
+      $('sticker-status').textContent = 'Sticker ' + num + ' is already on "' + state.bindings[num].name + '" — tap an item to move it.';
+    } else {
+      $('sticker-status').textContent = '';
+    }
+    renderStickerScreen();
+  }
+
+  function handleItemTap(itemIndex) {
+    const item = state.inventory[itemIndex];
+    if (!item) return;
+    if (state.currentSticker == null) {
+      $('sticker-status').textContent = 'Scan a sticker first, or type its number above.';
+      return;
+    }
+    const num = state.currentSticker;
+    const existing = state.bindings[num];
+    if (existing && existing.id === item.id) {
+      $('sticker-status').textContent = 'Sticker ' + num + ' is already on "' + item.name + '".';
+      return;
+    }
+    if (!existing && remainingCount(item) === 0) {
+      $('sticker-status').textContent = 'All ' + item.name + ' already have stickers.';
+      return;
+    }
+    state.bindings[num] = { id: item.id, name: item.name };
+    state.currentSticker = null;
+    saveState();
+    API.saveStickerBinding(num, item.id, item.name);
+    if (existing) {
+      $('sticker-status').textContent = 'Sticker ' + num + ' moved from "' + existing.name + '" to "' + item.name + '".';
+    } else {
+      $('sticker-status').textContent = 'Sticker ' + num + ' is now "' + item.name + '". Scan the next one.';
+    }
+    $('sticker-number').value = '';
+    renderStickerScreen();
+  }
+
+  function handleStickerManual() {
+    setCurrentSticker($('sticker-number').value);
+  }
+
+  // ---------- Screen 3: product ----------
+  function fillProductScreen() {
+    const core = state.setup.coreProduct || 'your core product';
+    $('product-heading').textContent =
+      'Time to tell the ai what makes you special — you mentioned ' + core + ' as your core product.';
+    $('product-type').value = state.product.type;
+    $('product-toppings').value = state.product.toppings;
+    $('product-extras').value = state.product.extras;
+    $('product-recipe').value = state.product.recipe;
+    renderTempToggle();
+  }
+
+  function renderTempToggle() {
+    $('product-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
+      btn.classList.toggle('selected', btn.getAttribute('data-opt') === state.product.temp);
+    });
+  }
+
+  function handleTempTap(e) {
+    state.product.temp = e.currentTarget.getAttribute('data-opt');
+    saveState();
+    $('product-status').textContent = '';
+    renderTempToggle();
+  }
+
+  function handleProductSubmit(e) {
+    e.preventDefault();
+    if (!state.product.temp) {
+      $('product-status').textContent = 'Tap Hot or Cold first.';
+      return;
+    }
+    state.product.type = $('product-type').value.trim();
+    state.product.toppings = $('product-toppings').value.trim();
+    state.product.extras = $('product-extras').value.trim();
+    // Recipe: saved locally ONLY — never sent to any server. See the seam note.
+    state.product.recipe = $('product-recipe').value;
+    saveState();
+    go('schedule');
+  }
+
+  // ---------- Screen 4: schedule ----------
+  function renderScheduleScreen() {
+    let html = '';
+    state.schedule.forEach(function (row, i) {
+      html += '<div class="day-card">' +
+        '<div class="day-head">' +
+          '<span class="day-name">' + escapeHtml(row.day) + '</span>' +
+          '<div class="day-toggle">' +
+            '<button type="button" class="ob-toggle-opt' + (row.open ? ' selected' : '') + '" data-i="' + i + '" data-open="1">Open</button>' +
+            '<button type="button" class="ob-toggle-opt' + (!row.open ? ' selected' : '') + '" data-i="' + i + '" data-open="0">Closed</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="day-times">' +
+          '<label>Opens<input type="time" data-i="' + i + '" data-kind="start" value="' + escapeHtml(row.start) + '"' + (row.open ? '' : ' disabled') + '></label>' +
+          '<label>Closes<input type="time" data-i="' + i + '" data-kind="end" value="' + escapeHtml(row.end) + '"' + (row.open ? '' : ' disabled') + '></label>' +
+        '</div>' +
+      '</div>';
+    });
+    $('day-list').innerHTML = html;
+
+    $('day-list').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        const i = Number(e.currentTarget.getAttribute('data-i'));
+        state.schedule[i].open = e.currentTarget.getAttribute('data-open') === '1';
+        saveState();
+        renderScheduleScreen();
+      });
+    });
+    $('day-list').querySelectorAll('input[type="time"]').forEach(function (input) {
+      input.addEventListener('input', function (e) {
+        const i = Number(e.target.getAttribute('data-i'));
+        const kind = e.target.getAttribute('data-kind');
+        state.schedule[i][kind] = e.target.value;
+        saveState();
+      });
+    });
+  }
+
+  function handleScheduleContinue() {
+    saveState();
+    API.saveSchedule();
+    finishOnboarding();
+  }
+
+  function finishOnboarding() {
+    state.done = true;
+    saveState();
+    // Keys index.html already reads — written here so the rest of the app
+    // knows this business the moment onboarding ends.
+    try {
+      localStorage.setItem('jaeFirstProduct', state.setup.coreProduct || '');
+      localStorage.setItem('jaeBusinessType', 'Restaurant or cafe');
+      localStorage.setItem('partnerModeOnboardingComplete', '1');
+      // Redundant with the write in handleAuthSubmit — belt-and-suspenders
+      // so index.html always finds an accountId once onboarding is done,
+      // even if that earlier write somehow didn't happen (e.g. state.account
+      // existed already, screen-auth was skipped some other way).
+      if (state.account && state.account.id) {
+        localStorage.setItem('jaeAccountId', state.account.id);
+        localStorage.setItem('jaeAccountEmail', state.account.email || '');
+      }
+    } catch (err) {}
+    API.completeOnboarding();
+    go('done');
+  }
+
+  // ---------- Screen 5: done ----------
+  function fillDoneScreen() {
+    const unfinished = state.inventory.some(function (item) { return remainingCount(item) > 0; });
+    $('done-sticker-reminder').hidden = !unfinished;
+  }
+
+  // ---------- Render ----------
+  function render() {
+    // Gate: no account, no access to Step 1 onward — bounce back to auth
+    // instead of silently proceeding (covers direct deep links, e.g. the
+    // sticker QR deep link below, landing past intro with no account).
+    if (POST_AUTH_SCREENS.indexOf(state.screen) !== -1 && !state.account) {
+      state.screen = 'auth';
+      saveState();
+    }
+    SCREENS.forEach(function (name) {
+      $('screen-' + name).hidden = name !== state.screen;
+    });
+    if (state.screen === 'auth') fillAuthScreen();
+    if (state.screen === 'setup') fillSetupForm();
+    if (state.screen === 'package') fillPackageScreen();
+    if (state.screen === 'inventory') renderInventoryRows();
+    if (state.screen === 'stickers') renderStickerScreen();
+    if (state.screen === 'product') fillProductScreen();
+    if (state.screen === 'schedule') renderScheduleScreen();
+    if (state.screen === 'done') fillDoneScreen();
+  }
+
+  // ---------- Login deep link: /onboarding.html?mode=login ----------
+  // index.html's header "Login" button sends returning owners here so they
+  // land directly on screen-auth in login mode, instead of the old dead-end
+  // "accounts are coming soon" message.
+  function handleAuthModeDeepLink() {
+    const params = new URLSearchParams(location.search);
+    if (params.get('mode') !== 'login') return;
+    try { history.replaceState(null, '', location.pathname); } catch (err) {}
+    authMode = 'login';
+    state.screen = 'auth';
+    saveState();
+  }
+
+  // ---------- Sticker QR deep link: /onboarding.html?sticker=N ----------
+  // The mailed stickers are pre-printed QR codes; the phone's native camera
+  // opens this URL — no camera code needed here.
+  //
+  // CAVEAT (why typed entry is the promoted path in all on-screen copy):
+  // on iOS, a camera scan always opens Safari, and Safari's localStorage is
+  // SEPARATE from the installed home-screen app's — so a scan can land in a
+  // browser instance with none of the user's saved state. Typing the number
+  // inside the app always works. When the server exists, resolve scans
+  // server-side (look up the business by session/sticker) so the Safari
+  // instance works too — and pick the permanent URL before printing stickers.
+  function handleStickerDeepLink() {
+    const params = new URLSearchParams(location.search);
+    const raw = params.get('sticker');
+    if (raw == null) return;
+    try { history.replaceState(null, '', location.pathname); } catch (err) {}
+    const num = Math.floor(Number(raw));
+    if (!(num >= 1 && num <= 100)) return;
+    if (state.done) {
+      const b = state.bindings[num];
+      $('global-status').textContent = b
+        ? 'Setup is complete — sticker ' + num + ' is on "' + b.name + '" and already working.'
+        : 'Setup is complete — sticker ' + num + ' is already working.';
+    } else if (state.inventorySubmitted) {
+      state.screen = 'stickers';
+      saveState();
+      setCurrentSticker(num);
+    } else {
+      $('global-status').textContent = 'Sticker ' + num + ' scanned — submit your walk-around list first, then scan it again.';
+    }
+  }
+
+  function mount() {
+    $('intro-start').addEventListener('click', function () { go('auth'); });
+
+    $('auth-form').addEventListener('submit', handleAuthSubmit);
+    $('auth-mode-toggle').addEventListener('click', handleAuthModeToggle);
+    $('auth-toggle-visibility').addEventListener('click', handleAuthVisibilityToggle);
+    $('auth-back').addEventListener('click', function () { go('intro'); });
+
+    $('setup-form').addEventListener('submit', handleSetupSubmit);
+    $('setup-paid-confirm').addEventListener('click', handlePaidConfirm);
+    $('setup-back').addEventListener('click', function () { go('auth'); });
+
+    $('package-address').addEventListener('input', handlePackageAddressInput);
+    $('package-continue').addEventListener('click', function () { go('inventory'); });
+    $('package-back').addEventListener('click', function () { go('setup'); });
+
+    $('inv-add').addEventListener('click', handleInventoryAdd);
+    $('inv-submit').addEventListener('click', handleInventorySubmit);
+    $('inv-back').addEventListener('click', function () { go('package'); });
+
+    $('sticker-use').addEventListener('click', handleStickerManual);
+    $('sticker-number').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); handleStickerManual(); }
+    });
+    $('sticker-continue').addEventListener('click', function () { go('product'); });
+    $('sticker-continue-anyway').addEventListener('click', function () { go('product'); });
+    $('sticker-back').addEventListener('click', function () {
+      state.inventorySubmitted = false;
+      saveState();
+      go('inventory');
+    });
+
+    $('product-form').addEventListener('submit', handleProductSubmit);
+    $('product-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
+      btn.addEventListener('click', handleTempTap);
+    });
+    $('product-back').addEventListener('click', function () { go('stickers'); });
+
+    $('schedule-continue').addEventListener('click', handleScheduleContinue);
+    $('schedule-back').addEventListener('click', function () { go('product'); });
+
+    $('done-open-app').addEventListener('click', function () { location.href = '/index.html'; });
+    $('done-back').addEventListener('click', function () { go('schedule'); });
+
+    handleAuthModeDeepLink();
+    handleStickerDeepLink();
+    render();
+  }
+
+  mount();
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 const { kv } = require('@vercel/kv');
 const webpush = require('web-push');
+const { safeCompare } = require('./_safe-compare');
 
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT,
@@ -18,7 +19,7 @@ module.exports = async function handler(req, res) {
   }
 
   const token = req.headers['x-admin-token'];
-  if (!token || token !== process.env.ADMIN_TOKEN) {
+  if (!token || !safeCompare(String(token), String(process.env.ADMIN_TOKEN || ''))) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -30,20 +31,24 @@ module.exports = async function handler(req, res) {
     url: url || '/',
   });
 
-  const ids = (await kv.smembers('subscriptions')) || [];
+  // Account-scoped storage (see subscribe.js): pushaccounts is now a set of
+  // accountIds rather than endpoint hashes, each with its own
+  // pushsub:<accountId> subscription — broadcast-to-everyone behavior is
+  // unchanged, it just enumerates accounts instead of raw subscription ids.
+  const accountIds = (await kv.smembers('pushaccounts')) || [];
   const results = { sent: 0, removed: 0, failed: 0 };
 
   await Promise.all(
-    ids.map(async (id) => {
-      const subscription = await kv.get(`sub:${id}`);
+    accountIds.map(async (accountId) => {
+      const subscription = await kv.get(`pushsub:${accountId}`);
       if (!subscription) return;
       try {
         await webpush.sendNotification(subscription, payload);
         results.sent += 1;
       } catch (err) {
         if (err.statusCode === 404 || err.statusCode === 410) {
-          await kv.del(`sub:${id}`);
-          await kv.srem('subscriptions', id);
+          await kv.del(`pushsub:${accountId}`);
+          await kv.srem('pushaccounts', accountId);
           results.removed += 1;
         } else {
           results.failed += 1;

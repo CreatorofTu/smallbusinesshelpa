@@ -1,12 +1,22 @@
 const { kv } = require('@vercel/kv');
+const { getSessionFromRequest } = require('./_session');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const NOTE_MAX_LENGTH = 280;
 
-// Single shared business instance, no auth — the caller (the owner's own
-// device) always sends its own local calendar date explicitly. We never
-// derive "today" from the server clock here: this function runs in UTC and
-// would file evening entries under the wrong day.
+// Account-scoped: every business gets its own logentry:<accountId>:<date>
+// keys and its own logdates:<accountId> sorted set — previously a single
+// global logentry:<date>/logdates pair shared (and silently collided) across
+// every business. The caller (the owner's own device) always sends its own
+// local calendar date explicitly. We never derive "today" from the server
+// clock here: this function runs in UTC and would file evening entries under
+// the wrong day.
+//
+// AUTHORIZATION: accountId is derived from the caller's signed session
+// cookie (see _session.js), never from the request body. A client-supplied
+// accountId in the body is no longer accepted for this purpose — previously
+// it was the only thing checked, so anyone who ever obtained another
+// business's accountId could write to that business's log forever.
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -14,6 +24,13 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      res.status(401).json({ error: 'Not logged in' });
+      return;
+    }
+    const accountId = session.accountId;
+
     const { date, customers, sales, note } = req.body || {};
 
     if (!date || typeof date !== 'string' || !DATE_RE.test(date)) {
@@ -56,8 +73,8 @@ module.exports = async function handler(req, res) {
     // a zset member with no matching entry (or vice versa) it already
     // tolerates that by filtering with `if (entries[i])`.
     const pipeline = kv.multi();
-    pipeline.set(`logentry:${date}`, entry);
-    pipeline.zadd('logdates', { score: Number(date.replace(/-/g, '')), member: date });
+    pipeline.set(`logentry:${accountId}:${date}`, entry);
+    pipeline.zadd(`logdates:${accountId}`, { score: Number(date.replace(/-/g, '')), member: date });
     await pipeline.exec();
 
     res.status(200).json({ ok: true });

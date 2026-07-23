@@ -1,5 +1,8 @@
 [
-  { "id": "employees", "type": "counter", "prompt": "How many employees do you have?", "min": 0, "max": 50, "start": 0 },
-  { "id": "assistantManager", "type": "toggle", "prompt": "Do you have an assistant manager?", "options": ["No", "Yes"] },
-  { "id": "yearsInBusiness", "type": "counter", "prompt": "How long have you been in business?", "unit": "years", "min": 0, "max": 60, "start": 0 }
+  { "id": "businessType", "type": "toggle", "prompt": "Which best describes your business?", "options": ["Restaurant", "Online food sales"] },
+  { "id": "products", "type": "product-builder", "prompt": "What do you sell? Add each core product, then what defines it right now." },
+  { "id": "environment", "type": "env-form", "prompt": "A few things that don't change often.", "fields": [
+    { "id": "hours", "label": "Hours open", "kind": "text", "placeholder": "e.g. 8am–3pm, Tue–Sun" },
+    { "id": "price", "label": "Average price per order ($)", "kind": "number", "min": 0, "step": "0.01" }
+  ] }
 ]
