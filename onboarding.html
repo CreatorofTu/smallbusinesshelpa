@@ -136,6 +136,8 @@
   }
 
   form { display: flex; flex-direction: column; gap: .85rem; }
+  #setup-vision-block { display: flex; flex-direction: column; gap: .6rem; margin-top: .5rem; }
+  #setup-vision-block button { align-self: stretch; }
   #setup-tier-block { display: flex; flex-direction: column; gap: .6rem; margin-top: .5rem; }
   #setup-tier-block button { align-self: stretch; }
   label, .field-label { display: flex; flex-direction: column; gap: .35rem; font-size: .85rem; color: var(--ink-soft); }
@@ -322,6 +324,15 @@
         </label>
         <button type="submit" id="setup-pay">Continue</button>
       </form>
+
+      <div id="setup-vision-block" hidden>
+        <p><strong>What vision do you have that you'll use the ai to achieve?</strong></p>
+        <p class="soft">This stays between us.</p>
+        <button type="button" id="vision-retirement-btn">Retirement</button>
+        <p class="soft">We set a goal that: you can walk away at any time, any age, and your business can consistently support your lifestyle.</p>
+        <button type="button" id="vision-franchise-btn">Franchise</button>
+        <p class="soft">We set a goal to hit a high bar, then make it the normal — automated systems that keep producing consistently high-quality results across your business.</p>
+      </div>
 
       <div id="setup-tier-block" hidden>
         <p><strong>Which matters more to you right now?</strong></p>
@@ -564,6 +575,9 @@
     recordPackageReceived() {
       return this.post('/api/save-profile', { packageReceived: true });
     },
+    saveVision(vision) {
+      return this.post('/api/save-profile', { vision: vision });
+    },
     submitInventory() {
       return this.post('/api/save-profile', { inventory: state.inventory });
     },
@@ -748,6 +762,7 @@
       account: null,          // { id, email } — set on sign up / log in. Password is NEVER stored here or anywhere.
       setup: { businessName: '', ownerName: '', address: '', coreProduct: '' },
       paid: false,
+      vision: null,            // 'retirement' or 'franchise' — asked right before the tier fork, gives it real context
       tier: null,              // 'light' ($20/mo, save money) or 'full' ($100/mo, get the most out of it) — set the moment the owner picks one, before payment even opens
       paymentStarted: false,   // the payment page was opened at least once
       deliveryAddress: '',
@@ -970,6 +985,7 @@
       // Already paid (e.g. came back to this screen via Back from package)
       // — show the form normally, just past the point of asking again.
       $('setup-form').hidden = false;
+      $('setup-vision-block').hidden = true;
       $('setup-tier-block').hidden = true;
       $('setup-paid-confirm').hidden = true;
       $('setup-pay').textContent = 'Continue';
@@ -979,16 +995,29 @@
     if (state.paymentStarted) {
       // Survive a reload after the payment page was opened: keep the
       // "I've paid — continue" path visible so nobody is pushed to pay
-      // twice, or asked the tier question a second time for a choice
+      // twice, or asked the vision/tier questions again for choices
       // they've already made.
       $('setup-form').hidden = true;
+      $('setup-vision-block').hidden = true;
       $('setup-tier-block').hidden = true;
       $('setup-paid-confirm').hidden = false;
       $('setup-status').textContent = 'Already paid on the payment page? Tap "I\'ve paid — continue" below.';
       return;
     }
 
+    if (state.vision) {
+      // Survive a reload mid-flow after the vision question was already
+      // answered but before a tier was picked — go straight to the tier
+      // question rather than asking vision again.
+      $('setup-form').hidden = true;
+      $('setup-vision-block').hidden = true;
+      $('setup-tier-block').hidden = false;
+      $('setup-paid-confirm').hidden = true;
+      return;
+    }
+
     $('setup-form').hidden = false;
+    $('setup-vision-block').hidden = true;
     $('setup-tier-block').hidden = true;
     $('setup-paid-confirm').hidden = true;
     $('setup-pay').textContent = 'Continue';
@@ -1008,12 +1037,32 @@
     readSetupForm();
     API.saveSetup();
     if (state.paid) { go('package'); return; }
+    if (state.vision) {
+      // Already answered on an earlier pass through this screen (e.g. Back
+      // then forward again) — don't ask a second time, go straight to the
+      // tier question.
+      $('setup-form').hidden = true;
+      $('setup-tier-block').hidden = false;
+      return;
+    }
+    // Ask the vision question first, right before the tier fork — the
+    // founder's own placement call: it gives the tier choice real context
+    // (what they're actually trying to get out of this) instead of landing
+    // cold on a price/plan decision.
+    $('setup-form').hidden = true;
+    $('setup-vision-block').hidden = false;
+  }
+
+  function handleVisionChoice(vision) {
+    state.vision = vision;
+    saveState();
+    API.saveVision(vision);
+    $('setup-vision-block').hidden = true;
     // Ask which matters more BEFORE opening any payment link — an honest
     // fork (two genuinely different real plans), not a fake-choice
     // mechanic: the price is shown plainly on both options, and picking
     // one opens that plan's own real payment link, nothing hidden or
     // revealed only after committing.
-    $('setup-form').hidden = true;
     $('setup-tier-block').hidden = false;
   }
 
@@ -1568,6 +1617,8 @@
     $('auth-back').addEventListener('click', function () { go('intro'); });
 
     $('setup-form').addEventListener('submit', handleSetupSubmit);
+    $('vision-retirement-btn').addEventListener('click', function () { handleVisionChoice('retirement'); });
+    $('vision-franchise-btn').addEventListener('click', function () { handleVisionChoice('franchise'); });
     $('tier-light-btn').addEventListener('click', function () { startTierPayment('light'); });
     $('tier-full-btn').addEventListener('click', function () { startTierPayment('full'); });
     $('setup-paid-confirm').addEventListener('click', handlePaidConfirm);

@@ -54,6 +54,10 @@ const PAYMENT_MODES = ['payment-link', 'test-mode'];
 const TIER_VALUES = ['light', 'full'];
 const PAYMENT_AMOUNTS = { light: 20, full: 100 };
 const PAYMENTS_MAX = 20; // sane ceiling — this is a one-time onboarding charge, not a ledger
+// VISION (new): the "what are you actually trying to achieve" question
+// onboarding.html asks right before the tier fork. Stored as-is, an
+// allow-listed enum like TIER_VALUES above — no free text accepted.
+const VISION_VALUES = ['retirement', 'franchise'];
 
 // CHANGELOG (new, additive). Real change-log write path — previously
 // generate-directive.js's variableDiffLog was permanently `[]` because
@@ -314,6 +318,17 @@ module.exports = async function handler(req, res) {
     // early never gets a stale "did your package arrive" nudge afterward.
     if (body.packageReceived === true && !profile.packageReceivedAt) {
       profile.packageReceivedAt = new Date().toISOString();
+    }
+
+    // vision — asked once during onboarding, right before the tier fork:
+    // "retirement" or "franchise". Not wired into the changelog/diff-log
+    // system on purpose: there's no UI to change it after onboarding today,
+    // so it only ever moves from undefined to a real value, which
+    // diffField()'s own "both defined" guard would never log as a change
+    // anyway — adding dead tracking code for a revision path that doesn't
+    // exist would be speculative, not real.
+    if (VISION_VALUES.indexOf(body.vision) !== -1) {
+      profile.vision = body.vision;
     }
 
     if (body.completed === true) {
