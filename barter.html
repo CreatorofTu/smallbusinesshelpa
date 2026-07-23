@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Justaddegg — Barter</title>
+<!--
+  ============================================================
+  barter.html — the "Barter" reward-claim prototype (PRODUCT-CONTEXT.md's
+  distribution-partnership section, "Barter" reward-claim mechanic). First
+  buildable, testable version of the founder's own reframing: instead of a
+  guaranteed paid gig, broadcast a scarce, fun "first one there gets a free
+  waffle" offer to a small pool of opted-in local people, and let whoever
+  claims it first go do the pickup.
+
+  DELIBERATELY A NEW, SEPARATE PAGE — same isolation posture as
+  review.html/wait.html:
+    - no <link rel="manifest">, so a link shared for this never triggers an
+      "Add to Home Screen" prompt out of context.
+    - reads/writes NONE of the owner app's localStorage/session keys — a
+      Barter subscriber is a different, anonymous actor, never conflated
+      with a Justaddegg business-owner account.
+    - no login wall, ever, for anyone landing here.
+    - unlike wait.html/review.html, THIS page DOES register a service worker
+      and subscribe to push — that's the one real exception to "no PWA
+      machinery here," because the entire mechanic depends on a real push
+      notification reaching a real opted-in person. Reuses the SAME /sw.js
+      already serving the owner app (it's a generic origin-scoped worker
+      that just shows whatever title/body/url a push payload carries — see
+      sw.js's own header — so nothing there needed to change for this).
+
+  TWO MODES, one URL param:
+    - /barter.html            -> opt-in screen ("want first dibs on free
+      stuff from local businesses?").
+    - /barter.html?claim=<id> -> the specific offer from that push
+      notification, with the real atomic "Claim it" action
+      (api/barter-claim.js).
+
+  Only the VISUAL system (fonts, colors, card/button idioms) is copied from
+  wait.html/review.html — copied stylistically, not inherited structurally,
+  matching this codebase's own established no-shared-stylesheet convention
+  for these standalone customer-facing pages.
+
+  HONEST STATUS: this is explicitly a prototype (see PRODUCT-CONTEXT.md) —
+  broadcasting a real offer is admin-gated (api/barter-broadcast.js), not a
+  self-serve business feature yet. What's real here: a real push
+  notification, a real anonymous opt-in, and a real atomic first-claim-wins
+  race — proving the mechanic works before building the business-facing
+  side of it.
+  ============================================================
+-->
+
+<style>
+  @font-face {
+    font-family: 'Fustat';
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/Fustat-Variable.ttf') format('truetype-variations');
+  }
+
+  :root {
+    --bg: #ffffff;
+    --ink: #000000;
+    --ink-soft: #666666;
+    --line: #e0e0e0;
+    --font: 'Fustat', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+  }
+  main {
+    width: 100%;
+    max-width: 520px;
+    padding: 2rem 1.25rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .wordmark { font-family: var(--font); font-weight: 700; font-size: 1.25rem; }
+  h1 { font-family: var(--font); font-weight: 700; font-size: 1.5rem; line-height: 1.3; margin: 0; text-wrap: balance; }
+  p { margin: 0; line-height: 1.55; }
+  .soft { color: var(--ink-soft); font-size: .95rem; }
+
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.4rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%);
+    text-align: center;
+    align-items: center;
+  }
+
+  .disclosure { font-size: .85rem; color: var(--ink-soft); line-height: 1.5; }
+
+  .big-btn {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.25rem;
+    padding: 1.5rem 1.25rem;
+    border-radius: 16px;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+    cursor: pointer;
+    width: 100%;
+    min-height: 88px;
+  }
+  .big-btn:hover { opacity: .85; }
+  .big-btn:disabled { opacity: .45; cursor: default; }
+  .big-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  .status { font-size: .9rem; color: var(--ink-soft); min-height: 1.2em; }
+  .status.error { color: var(--ink); font-weight: 700; }
+
+  .confirm-card {
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 1.6rem 1.2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+  .confirm-card .check { font-size: 2.5rem; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="wordmark">Justaddegg</div>
+
+  <section id="screen-error" hidden>
+    <div class="card">
+      <h1>We couldn't load this</h1>
+      <p class="soft" id="error-message">This link doesn't look right.</p>
+    </div>
+  </section>
+
+  <section id="screen-optin" hidden>
+    <div class="card">
+      <h1>Want first dibs on free stuff from local businesses?</h1>
+      <p class="soft">Every so often, a nearby business needs a small favor — grab one item, drop it off, get something free for the trouble. Turn on alerts and you'll hear about it when one's up for grabs. Only the first person to claim it gets it.</p>
+      <button type="button" class="big-btn" id="optin-btn">Turn on alerts</button>
+      <div class="status" id="optin-status"></div>
+      <p class="disclosure">No account, no name, no email — just a device notification.</p>
+    </div>
+  </section>
+
+  <section id="screen-optin-done" hidden>
+    <div class="confirm-card">
+      <div class="check">&#10003;</div>
+      <h1>You're in</h1>
+      <p class="soft">We'll notify this device when something's up for grabs nearby.</p>
+    </div>
+  </section>
+
+  <section id="screen-claim" hidden>
+    <div class="card">
+      <h1 id="claim-reward-heading">Free something</h1>
+      <p class="soft" id="claim-description"></p>
+      <button type="button" class="big-btn" id="claim-btn">Claim it</button>
+      <div class="status" id="claim-status"></div>
+      <p class="disclosure">First tap wins — if someone beat you to it, you'll see that here.</p>
+    </div>
+  </section>
+
+  <section id="screen-claimed" hidden>
+    <div class="confirm-card">
+      <div class="check">&#10003;</div>
+      <h1>You got it</h1>
+      <p class="soft">Go pick it up — thanks for helping out.</p>
+    </div>
+  </section>
+
+  <section id="screen-already-claimed" hidden>
+    <div class="confirm-card">
+      <h1>Already claimed</h1>
+      <p class="soft">Someone beat you to it this time — turn on alerts for the next one.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  function $(id) { return document.getElementById(id); }
+
+  var FETCH_TIMEOUT_MS = 12000;
+  function fetchWithTimeout(url, options, timeoutMs) {
+    var ms = timeoutMs || FETCH_TIMEOUT_MS;
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, ms);
+    var opts = Object.assign({}, options, { signal: controller.signal });
+    return fetch(url, opts).then(
+      function (r) { clearTimeout(timer); return r; },
+      function (err) { clearTimeout(timer); throw err; }
+    );
+  }
+  function isTimeoutError(err) { return !!err && err.name === 'AbortError'; }
+
+  var SCREENS = ['screen-error', 'screen-optin', 'screen-optin-done', 'screen-claim', 'screen-claimed', 'screen-already-claimed'];
+  function showScreen(id) {
+    SCREENS.forEach(function (s) { $(s).hidden = (s !== id); });
+  }
+
+  // Same VAPID key already used by index.html's own push subscription flow
+  // (BBqNh2Qwr...) — one origin, one VAPID keypair, shared across every
+  // subscriber whether they're a business owner (index.html) or an
+  // anonymous Barter opt-in (this page).
+  var VAPID_PUBLIC_KEY = 'BBqNh2Qwr3M7EBAtPIK3zOrWuXIsBbs6zkiILpKlRgHbU1VxjfiUqdvrLs6icuV0mT9bmkj9LdaZ3hcgId2P9nc';
+
+  function urlBase64ToUint8Array(base64String) {
+    var padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    var rawData = atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  function handleOptIn() {
+    var btn = $('optin-btn');
+    btn.disabled = true;
+    $('optin-status').className = 'status';
+    $('optin-status').textContent = 'Turning on alerts…';
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      btn.disabled = false;
+      $('optin-status').className = 'status error';
+      $('optin-status').textContent = "This browser doesn't support alerts — try Chrome on Android, or Safari on iPhone after adding this page to your Home Screen.";
+      return;
+    }
+
+    navigator.serviceWorker.register('/sw.js')
+      .then(function () { return navigator.serviceWorker.ready; })
+      .then(function (registration) {
+        return registration.pushManager.getSubscription().then(function (existing) {
+          if (existing) return existing;
+          return registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+          });
+        });
+      })
+      .then(function (subscription) {
+        return fetchWithTimeout('/api/barter-subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: subscription }),
+        });
+      })
+      .then(function (res) {
+        if (!res.ok) {
+          return res.json().catch(function () { return null; }).then(function (data) {
+            throw new Error((data && data.error) || 'Could not turn on alerts.');
+          });
+        }
+        showScreen('screen-optin-done');
+      })
+      .catch(function (err) {
+        btn.disabled = false;
+        $('optin-status').className = 'status error';
+        $('optin-status').textContent = isTimeoutError(err)
+          ? 'Taking longer than expected — try again in a bit.'
+          : ((err && err.message) || 'Could not turn on alerts — check notification permission and try again.');
+      });
+  }
+
+  var params = new URLSearchParams(window.location.search);
+  var claimId = (params.get('claim') || '').trim();
+
+  if (!claimId) {
+    showScreen('screen-optin');
+    $('optin-btn').addEventListener('click', handleOptIn);
+    return;
+  }
+
+  // Claim mode — load the specific offer, then wire the atomic claim tap.
+  fetchWithTimeout('/api/barter-claim?id=' + encodeURIComponent(claimId), { method: 'GET' })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+    .then(function (res) {
+      if (!res.ok || !res.body || !res.body.order) {
+        $('error-message').textContent = (res.body && res.body.error) || "This offer doesn't exist anymore.";
+        showScreen('screen-error');
+        return;
+      }
+      var order = res.body.order;
+      if (order.status === 'claimed') {
+        showScreen('screen-already-claimed');
+        return;
+      }
+      $('claim-reward-heading').textContent = 'Free ' + order.reward;
+      $('claim-description').textContent = order.description;
+      showScreen('screen-claim');
+      $('claim-btn').addEventListener('click', function () {
+        var btn = $('claim-btn');
+        btn.disabled = true;
+        $('claim-status').className = 'status';
+        $('claim-status').textContent = 'Claiming…';
+        fetchWithTimeout('/api/barter-claim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: claimId }),
+        })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+          .then(function (res2) {
+            if (res2.body && res2.body.status === 'already-claimed') {
+              showScreen('screen-already-claimed');
+              return;
+            }
+            if (!res2.ok || !res2.body || !res2.body.ok) {
+              btn.disabled = false;
+              $('claim-status').className = 'status error';
+              $('claim-status').textContent = (res2.body && res2.body.error) || 'Could not claim that — try again.';
+              return;
+            }
+            showScreen('screen-claimed');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            $('claim-status').className = 'status error';
+            $('claim-status').textContent = isTimeoutError(err)
+              ? 'Taking longer than expected — try again in a bit.'
+              : 'Could not reach the server — check your connection and try again.';
+          });
+      });
+    })
+    .catch(function () {
+      $('error-message').textContent = 'Could not load this offer — check your connection and try again.';
+      showScreen('screen-error');
+    });
+})();
+</script>
+</body>
+</html>
