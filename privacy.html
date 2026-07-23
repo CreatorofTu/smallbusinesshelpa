@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Justaddegg — Privacy Policy</title>
+<!--
+  ============================================================
+  privacy.html — real Privacy Policy, drafted 2026-07-23 against this
+  app's actual data flows (grep the real api/*.js files, not invented).
+  NOT reviewed by a licensed attorney — see the notice banner. Every claim
+  below is grounded in real, checkable code: what's collected, what's
+  explicitly never collected (recipe data), who sees customer feedback
+  (never the owner, verbatim), and which third parties process data
+  (Vercel/KV, Anthropic, Stripe, web push). If the app's real data
+  practices change, this file goes stale and must be updated in the same
+  pass — it is a factual description of the code, not evergreen boilerplate.
+  ============================================================
+-->
+<style>
+  @font-face {
+    font-family: 'Fustat';
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/Fustat-Variable.ttf') format('truetype-variations');
+  }
+  :root {
+    --bg: #ffffff; --ink: #000000; --ink-soft: #666666; --line: #e0e0e0;
+    --font: 'Fustat', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font); }
+  main { max-width: 680px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .wordmark { font-weight: 700; font-size: 1.3rem; }
+  .back-link { color: var(--ink); text-decoration: underline; font-size: .95rem; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
+  h3 { font-size: .98rem; margin: 1.25rem 0 .4rem; }
+  p, li { line-height: 1.6; color: var(--ink); font-size: .95rem; }
+  .updated { color: var(--ink-soft); font-size: .85rem; margin: 0 0 1.5rem; }
+  .notice {
+    border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.1rem;
+    background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%); font-size: .88rem; color: var(--ink-soft);
+    margin-bottom: 2rem; line-height: 1.55;
+  }
+  .placeholder { background: #fff3cd; padding: .05em .3em; border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; margin: .75rem 0 1.25rem; font-size: .88rem; }
+  th, td { border: 1px solid var(--line); padding: .5rem .6rem; text-align: left; vertical-align: top; }
+  th { background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%); }
+</style>
+</head>
+<body>
+<main>
+  <div class="header-row">
+    <span class="wordmark">Justaddegg</span>
+    <a class="back-link" href="/index.html">Back</a>
+  </div>
+
+  <div class="notice">
+    <strong>Note to the founder:</strong> this draft describes what the app actually collects and does today, based on the real code — not a generic template. It has not been reviewed by a licensed attorney. Have a real lawyer review it before relying on it, and keep it in sync any time real data handling changes. Fill in every <span class="placeholder">bracketed placeholder</span> before publishing.
+  </div>
+
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: <span class="placeholder">[DATE]</span></p>
+
+  <p>This Policy explains what Justaddegg ("we," "us," "our," operated by <span class="placeholder">[YOUR BUSINESS/LLC NAME]</span>) collects, why, and what you can do about it. There are two different people this Policy covers: <strong>business owners</strong> who create an account, and <strong>anonymous customers</strong> who scan a QR code at a participating business. We treat these very differently, described below.</p>
+
+  <h2>What we collect from business owners (account holders)</h2>
+  <table>
+    <tr><th>Data</th><th>Why we collect it</th></tr>
+    <tr><td>Email address, password (stored as a one-way hash, never in plain text)</td><td>To create and secure your account</td></tr>
+    <tr><td>Business name, owner name, business address, core product</td><td>To personalize the Service and generate your customer-facing QR pages</td></tr>
+    <tr><td>Daily customer counts, sales figures, and any notes you write</td><td>To compute your business's baseline and generate directives</td></tr>
+    <tr><td>Your walk-around item list (e.g. "Radio," "Table 3") and which sticker number is bound to each</td><td>To route QR scans to the right feedback page</td></tr>
+    <tr><td>Your business hours, schedule</td><td>To know when the Service is relevant to your business</td></tr>
+    <tr><td>Payment confirmation (which plan, when — never your card number, which goes straight to Stripe)</td><td>To keep a record that you've paid</td></tr>
+    <tr><td>Push notification subscription, if you opt in</td><td>To send you reminders and alerts you asked for</td></tr>
+  </table>
+
+  <h3>What we deliberately never collect</h3>
+  <p>Your recipe (ingredients you enter during setup) is never sent to our servers — it stays only on the device/browser you typed it into. This is a real, enforced choice in how the product is built, not just a policy statement: our servers have no code path that accepts or stores it.</p>
+
+  <h2>What we collect from anonymous customers (QR scans)</h2>
+  <p>Customers scanning a QR code at a participating business do not create an account and are never asked for their name, email, or any identifying information. We collect:</p>
+  <ul>
+    <li>Their answers to short feedback questions (e.g. whether they got the business's core product, a price they say they paid, free-text comments about a specific item)</li>
+    <li>Timestamps for our "wait time" feature, if a business uses it (when someone tapped "I sat down" and "food arrived") — no identity attached, just two timestamps</li>
+    <li>IP address, used only to prevent abuse (rate-limiting), never stored long-term as part of any customer profile</li>
+  </ul>
+  <p><strong>The business owner never sees a customer's exact words.</strong> Individual comments are never shown verbatim to the business owner — only an AI-generated summary of patterns across multiple customers. This is a real, enforced design choice, not just a promise: the code that builds the owner's view never includes raw customer text.</p>
+
+  <h2>How business data is processed on a business's behalf</h2>
+  <p>If you're a business owner, the anonymous feedback your own customers submit is processed by us on your behalf, to generate the insights you see. We act as a data processor for that customer feedback — we don't sell it, share it with other businesses, or use it for any purpose beyond generating your own business's insights and improving the Service generally.</p>
+
+  <h2>Third parties who process data with us</h2>
+  <table>
+    <tr><th>Who</th><th>What they see</th></tr>
+    <tr><td>Vercel (hosting) and Vercel KV / Upstash (database)</td><td>All account and customer-feedback data, as our infrastructure providers</td></tr>
+    <tr><td>Anthropic (AI provider)</td><td>Business setup info, logged notes, and customer feedback text, in order to generate directives and summaries — never your recipe, never a customer's raw comment shown back to you verbatim from that same processing</td></tr>
+    <tr><td>Stripe (payments)</td><td>Your payment/card details directly — we never receive or store your card number</td></tr>
+    <tr><td>Web push services (browser/OS push infrastructure)</td><td>Only what's needed to deliver a notification you opted into, if you enabled that</td></tr>
+  </table>
+  <p>We do not sell your data to advertisers or data brokers.</p>
+
+  <h2>How long we keep data, and data loss</h2>
+  <p>We keep account and business data for as long as your account is active. We do not currently offer an automated way to export or permanently delete all your data on request — if you want your account and its data removed, contact us at <span class="placeholder">[SUPPORT EMAIL]</span> and we'll handle it manually. In plain terms: as an early-stage service, we don't yet have a formal backup system, so while we take reasonable care, we can't guarantee against data loss from a technical failure.</p>
+
+  <h2>Your choices</h2>
+  <ul>
+    <li>You can request a copy of your account data, or ask us to delete it, at <span class="placeholder">[SUPPORT EMAIL]</span>.</li>
+    <li>You can turn off push notifications at any time in your device's settings.</li>
+    <li>Anonymous customers have nothing to request deletion of that could identify them, since we never collect identifying information from them in the first place.</li>
+  </ul>
+
+  <h2>Children's privacy</h2>
+  <p>The Service is intended for business owners operating a food & beverage business, not children. We don't knowingly collect data from anyone under 18 as an account holder.</p>
+
+  <h2>Changes to this Policy</h2>
+  <p>If we materially change what we collect or how we use it, we'll update this page and, where required, notify you directly.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this Policy, or a data request? Reach us at <span class="placeholder">[SUPPORT EMAIL]</span>.</p>
+</main>
+</body>
+</html>

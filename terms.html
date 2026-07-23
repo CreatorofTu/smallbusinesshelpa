@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Justaddegg — Terms of Service</title>
+<!--
+  ============================================================
+  terms.html — real Terms of Service, drafted 2026-07-23 against this
+  app's actual behavior (grep the real api/*.js and .html files, not
+  invented). NOT reviewed by a licensed attorney — see the notice banner
+  at the top of the document itself, which must stay in place until a
+  real lawyer has reviewed this and the founder removes it deliberately.
+
+  Deliberately a standalone, public, no-login, no-manifest page — same
+  isolation posture as review.html/wait.html — so it's linkable from
+  anywhere (onboarding's signup screen, a future footer) without pulling
+  in app chrome or state.
+
+  Placeholders left in ALL CAPS + brackets for the founder to fill in
+  (legal entity name, contact email, governing jurisdiction) — never
+  invented, since none of those are real facts available in this codebase.
+  ============================================================
+-->
+<style>
+  @font-face {
+    font-family: 'Fustat';
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/Fustat-Variable.ttf') format('truetype-variations');
+  }
+  :root {
+    --bg: #ffffff; --ink: #000000; --ink-soft: #666666; --line: #e0e0e0;
+    --font: 'Fustat', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font); }
+  main { max-width: 680px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .wordmark { font-weight: 700; font-size: 1.3rem; }
+  .back-link { color: var(--ink); text-decoration: underline; font-size: .95rem; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
+  p, li { line-height: 1.6; color: var(--ink); font-size: .95rem; }
+  .updated { color: var(--ink-soft); font-size: .85rem; margin: 0 0 1.5rem; }
+  .notice {
+    border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.1rem;
+    background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%); font-size: .88rem; color: var(--ink-soft);
+    margin-bottom: 2rem; line-height: 1.55;
+  }
+  .placeholder { background: #fff3cd; padding: .05em .3em; border-radius: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="header-row">
+    <span class="wordmark">Justaddegg</span>
+    <a class="back-link" href="/index.html">Back</a>
+  </div>
+
+  <div class="notice">
+    <strong>Note to the founder:</strong> this draft was written against what this app actually does today — not a generic template — but it has not been reviewed by a licensed attorney. Have a real lawyer review it before relying on it for liability protection, especially once you're taking payment from anyone outside your own family. Fill in every <span class="placeholder">bracketed placeholder</span> before publishing.
+  </div>
+
+  <h1>Terms of Service</h1>
+  <p class="updated">Last updated: <span class="placeholder">[DATE]</span></p>
+
+  <p>These Terms govern your use of Justaddegg (the "Service"), operated by <span class="placeholder">[YOUR BUSINESS/LLC NAME]</span> ("we," "us," "our"). By creating an account or using the Service, you agree to these Terms.</p>
+
+  <h2>1. What the Service is</h2>
+  <p>Justaddegg helps small food & beverage businesses track daily performance (customer counts, sales, notes), collect anonymous customer feedback via QR codes placed around the business, and generates plain-language observations ("directives") about what may be affecting the business, based on the data you and your customers provide.</p>
+
+  <h2>2. Not professional advice</h2>
+  <p>The Service's directives, suggestions, and any AI-generated output are decision-support tools only. They are not financial, legal, business, or professional advice, and we do not guarantee any business outcome, revenue change, or accuracy of any specific insight. You are solely responsible for decisions you make about your business, whether or not informed by the Service.</p>
+
+  <h2>3. What we don't do</h2>
+  <p>The Service does not act on your behalf. It does not place orders, change prices, contact your suppliers, or take any autonomous action affecting your business. Every observation the Service surfaces is for you to read and decide on — nothing happens automatically as a result of it.</p>
+
+  <h2>4. Your account</h2>
+  <p>You must provide accurate information when creating an account and are responsible for keeping your login credentials secure. You're responsible for all activity under your account. Let us know at <span class="placeholder">[SUPPORT EMAIL]</span> if you believe your account has been compromised.</p>
+
+  <h2>5. Payment and refunds</h2>
+  <p>The current one-time setup fee is $20, covering your physical sticker kit and initial account setup, processed through our payment provider (Stripe) — we never see or store your card details.</p>
+  <p><strong>Refunds:</strong> if you're not satisfied, contact us at <span class="placeholder">[SUPPORT EMAIL]</span> within 14 days of payment for a full refund, provided your sticker kit has not yet shipped. Once your kit has shipped, refunds are considered case by case. If we ever introduce a recurring monthly plan, its own billing and cancellation terms will be described separately at that time.</p>
+
+  <h2>6. Acceptable use</h2>
+  <p>You agree not to use the Service to collect information you're not legally entitled to collect from your customers, to misrepresent AI-generated content as a genuine, unprompted customer testimonial on third-party platforms (e.g. presenting our AI's summary of your business as if it were an organic review), or to attempt to access another business's account or data.</p>
+
+  <h2>7. Customer-submitted content</h2>
+  <p>Anonymous customers may submit feedback through QR codes placed in your business. You never see this feedback word-for-word — only an AI-generated summary. We're not responsible for the accuracy of anonymous customer submissions, and we may remove content that violates these Terms or applicable law.</p>
+
+  <h2>8. Disclaimer of warranties</h2>
+  <p>The Service is provided "as is" and "as available," without warranties of any kind, express or implied, including fitness for a particular purpose or non-infringement. We don't guarantee the Service will be uninterrupted, error-free, or that any data will never be lost — see our Privacy Policy for more on how your data is stored.</p>
+
+  <h2>9. Limitation of liability</h2>
+  <p>To the fullest extent permitted by law, <span class="placeholder">[YOUR BUSINESS/LLC NAME]</span> is not liable for indirect, incidental, or consequential damages, or for any business losses, arising from your use of the Service. Our total liability for any claim relating to the Service is limited to the amount you paid us in the 12 months before the claim arose.</p>
+
+  <h2>10. Changes to the Service or these Terms</h2>
+  <p>We may update these Terms or change the Service over time. We'll make a reasonable effort to let you know about material changes. Continuing to use the Service after a change means you accept the updated Terms.</p>
+
+  <h2>11. Governing law</h2>
+  <p>These Terms are governed by the laws of <span class="placeholder">[YOUR STATE/COUNTRY]</span>, without regard to conflict-of-law principles.</p>
+
+  <h2>12. Contact</h2>
+  <p>Questions about these Terms? Reach us at <span class="placeholder">[SUPPORT EMAIL]</span>.</p>
+</main>
+</body>
+</html>

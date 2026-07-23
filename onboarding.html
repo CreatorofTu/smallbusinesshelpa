@@ -81,6 +81,7 @@
     max-width: 62ch;
   }
   .soft { color: var(--ink-soft); font-size: .95rem; }
+  .soft a { color: var(--ink); }
 
   .card {
     border: 1px solid var(--line);
@@ -270,6 +271,7 @@
         </label>
         <button type="submit" id="auth-submit">Create account</button>
       </form>
+      <p class="soft" id="auth-legal-note">By creating an account, you agree to our <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
       <div class="status" id="auth-status"></div>
       <button type="button" class="tertiary-link" id="auth-toggle-visibility">Show password</button>
       <button type="button" class="tertiary-link" id="auth-mode-toggle">Already started? Log in instead</button>
@@ -830,11 +832,13 @@
       $('auth-subhead').textContent = "You'll use this to get back into your setup anytime.";
       $('auth-submit').textContent = 'Create account';
       $('auth-mode-toggle').textContent = 'Already started? Log in instead';
+      $('auth-legal-note').hidden = false;
     } else {
       $('auth-heading').textContent = 'Log in';
       $('auth-subhead').textContent = 'Enter the email and password you used before.';
       $('auth-submit').textContent = 'Log in';
       $('auth-mode-toggle').textContent = 'New here? Create an account instead';
+      $('auth-legal-note').hidden = true;
     }
     if (state.account && !$('auth-email').value) $('auth-email').value = state.account.email;
   }
