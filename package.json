@@ -5,6 +5,7 @@
   "dependencies": {
     "web-push": "^3.6.7",
     "@vercel/kv": "^1.0.1",
-    "bcryptjs": "^2.4.3"
+    "bcryptjs": "^2.4.3",
+    "stripe": "^17.0.0"
   }
 }

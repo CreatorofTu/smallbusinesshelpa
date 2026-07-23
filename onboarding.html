@@ -500,16 +500,14 @@
 
 <script>
   // Real Stripe Payment Links, one per tier — the "save money" vs. "get the
-  // most out of it" fork on screen-setup opens the matching one.
-  // TODO(founder): confirm PAYMENT_LINK_LIGHT is actually a recurring
-  // $20/MONTH subscription link, not the old one-time $20 setup charge it
-  // used to be — reused here as a placeholder since it's the only real link
-  // that exists today. PAYMENT_LINK_FULL is empty until the founder creates
-  // a real $100/mo link; empty falls back to the same honest "not connected
-  // yet (test mode)" posture handleTierChoice() already uses for
-  // PAYMENT_LINK_LIGHT, so neither path can silently fake a real charge.
-  const PAYMENT_LINK_LIGHT = 'https://buy.stripe.com/eVq00l3uv64S57R6ep9k400';
-  const PAYMENT_LINK_FULL = '';
+  // most out of it" fork on screen-setup opens the matching one. Both are
+  // real recurring monthly subscriptions (2026-07-23 billing revision —
+  // provisioned via scripts/stripe-provision.js, lookup_keys
+  // justaddegg_light_monthly/justaddegg_full_monthly). The old accidental
+  // one-time $20 link this replaced should be deactivated in the Stripe
+  // Dashboard once these are confirmed live.
+  const PAYMENT_LINK_LIGHT = 'https://buy.stripe.com/14AbJ3e99al8cAjgT39k401';
+  const PAYMENT_LINK_FULL = 'https://buy.stripe.com/28E6oJ7KL3WKasb7it9k402';
 
   // ============================================================
   // SERVER SEAM — /api/save-profile.js is now real (account-scoped,
@@ -1069,8 +1067,19 @@
   function startTierPayment(tier) {
     state.tier = tier;
     saveState();
-    const link = tier === 'full' ? PAYMENT_LINK_FULL : PAYMENT_LINK_LIGHT;
+    let link = tier === 'full' ? PAYMENT_LINK_FULL : PAYMENT_LINK_LIGHT;
     if (link) {
+      // client_reference_id is the ONLY thread tying the resulting Stripe
+      // payment back to this account: Stripe carries this URL param through
+      // checkout untouched and hands it to /api/stripe-webhook on the
+      // checkout.session.completed event, which is where the paid tier
+      // becomes real server-side (see that file's header). Guarded rather
+      // than assumed — if somehow no account exists yet, the payment still
+      // opens (never block a willing payer on our own bookkeeping); it just
+      // arrives unlinked, which the webhook logs and skips.
+      if (state.account && state.account.id) {
+        link += (link.indexOf('?') === -1 ? '?' : '&') + 'client_reference_id=' + encodeURIComponent(state.account.id);
+      }
       state.paymentStarted = true;
       saveState();
       window.open(link, '_blank');

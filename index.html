@@ -392,6 +392,19 @@
     <div class="status" id="test-status"></div>
   </div>
 
+  <!-- Upgrade card — only shown when the SERVER says this account's tier
+       is 'light' (GET /api/stripe-upgrade, session-scoped; see
+       maybeShowUpgradeCard() below). Gated server-side on purpose: no
+       localStorage flag on this page knows the real tier — the Stripe
+       webhook writes tier to KV, never to any browser — so a local flag
+       would go stale (or be editable) exactly when it matters. -->
+  <div class="card" id="upgrade-card" hidden>
+    <strong>Upgrade to Full — $100/mo</strong>
+    <p class="soft">Every feature, same account. Stripe credits the unused part of your current $20 month and charges the difference — you're never billed both plans.</p>
+    <button type="button" id="upgrade-btn">Upgrade to Full — $100/mo</button>
+    <div class="status" id="upgrade-status"></div>
+  </div>
+
   <div class="card" id="denied-card" hidden>
     <p class="soft">Notifications are turned off in your phone's settings. You can turn them back on there anytime.</p>
   </div>
@@ -483,6 +496,9 @@
     goalChangeBtn: document.getElementById('goal-change-btn'),
     testBtn: document.getElementById('test-btn'),
     testStatus: document.getElementById('test-status'),
+    upgradeCard: document.getElementById('upgrade-card'),
+    upgradeBtn: document.getElementById('upgrade-btn'),
+    upgradeStatus: document.getElementById('upgrade-status'),
     deniedCard: document.getElementById('denied-card'),
     unsupportedCard: document.getElementById('unsupported-card'),
     genericInstallCard: document.getElementById('generic-install-card'),
@@ -748,6 +764,67 @@
       }
       maybeShowReadReveal();
       maybeShowContextCollection();
+      maybeShowUpgradeCard();
+    }
+  }
+
+  // ---- Light -> Full upgrade card ----
+  // Asks the server (not localStorage) what tier this account is really on
+  // and shows the upgrade card only for 'light' — see the card's own HTML
+  // comment for why server-side gating is the only honest source here.
+  // Checked once per page load (render() runs repeatedly from several event
+  // handlers; one tier answer per visit is plenty), and every failure path
+  // just leaves the card hidden — an upgrade pitch is the last thing worth
+  // showing on a guess.
+  let upgradeCardChecked = false;
+  function maybeShowUpgradeCard() {
+    if (upgradeCardChecked) return;
+    upgradeCardChecked = true;
+    fetchWithTimeout('/api/stripe-upgrade', { credentials: 'same-origin' })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (data && data.tier === 'light') {
+          els.upgradeCard.hidden = false;
+        }
+      })
+      .catch(function () {});
+  }
+
+  async function handleUpgradeClick() {
+    els.upgradeBtn.disabled = true;
+    els.upgradeStatus.textContent = 'Upgrading…';
+    try {
+      // AUTHORIZATION NOTE: same as every other account-scoped call on this
+      // page — the server derives the account from the signed session
+      // cookie sent automatically with this same-origin request; nothing
+      // account-identifying travels in the body.
+      const res = await fetchWithTimeout('/api/stripe-upgrade', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      if (res.status === 401) {
+        els.upgradeStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      let data = null;
+      try { data = await res.json(); } catch (err) {}
+      if (res.ok && data && data.ok) {
+        // Confirmed by the server — reflect the new tier plainly and
+        // retire the button so a second tap can't happen.
+        els.upgradeStatus.textContent = "Done — you're on the Full plan now ($100/mo).";
+        els.upgradeBtn.hidden = true;
+        return;
+      }
+      // The server's own error copy is already written for the owner
+      // (plain sentences, no jargon) — show it as-is when present.
+      els.upgradeStatus.textContent = (data && data.error) || "That didn't go through — try again in a bit.";
+      els.upgradeBtn.disabled = false;
+    } catch (err) {
+      els.upgradeStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
+      els.upgradeBtn.disabled = false;
     }
   }
 
@@ -1140,6 +1217,7 @@
     els.goalForm.addEventListener('submit', handleGoalFormSubmit);
     els.goalChangeBtn.addEventListener('click', handleGoalChange);
     els.testBtn.addEventListener('click', handleTestPush);
+    els.upgradeBtn.addEventListener('click', handleUpgradeClick);
     els.logForm.addEventListener('submit', handleLogSubmit);
 
     if ('serviceWorker' in navigator) {
