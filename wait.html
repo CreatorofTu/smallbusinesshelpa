@@ -212,6 +212,24 @@
 
   function $(id) { return document.getElementById(id); }
 
+  // fetchWithTimeout — kill-switch for a truly-hung fetch (dead connection,
+  // Vercel outage, etc). Duplicated locally per this codebase's own
+  // convention (no shared module between review.html/wait.html/etc) — if
+  // you fix something here, it does NOT propagate to the other copy.
+  // Aborts at timeoutMs (default 12s) via AbortController; callers detect
+  // the timeout case in their .catch by checking `err.name === 'AbortError'`.
+  var FETCH_TIMEOUT_MS = 12000;
+  function fetchWithTimeout(url, options, timeoutMs) {
+    var ms = timeoutMs || FETCH_TIMEOUT_MS;
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, ms);
+    var opts = Object.assign({}, options, { signal: controller.signal });
+    return fetch(url, opts).then(
+      function (r) { clearTimeout(timer); return r; },
+      function (err) { clearTimeout(timer); throw err; }
+    );
+  }
+
   var SCREENS = ['screen-error', 'screen-start', 'screen-arrived', 'screen-done', 'screen-expired'];
   function showScreen(id) {
     SCREENS.forEach(function (s) { $(s).hidden = (s !== id); });
@@ -251,7 +269,7 @@
     $('start-status').className = 'status';
     $('start-status').textContent = '';
 
-    fetch('/api/wait-start', {
+    fetchWithTimeout('/api/wait-start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ business: business }),
@@ -264,13 +282,22 @@
           $('start-status').textContent = (res.body && res.body.error) || "Couldn't start that — try again.";
           return;
         }
+        // Only ever stored on a real, completed, successful response above —
+        // a timed-out/aborted call never reaches this line, so no ticketId
+        // can land in sessionStorage for a ticket the server may not have
+        // actually created.
         storeTicketId(res.body.ticketId);
         showScreen('screen-arrived');
       })
-      .catch(function () {
+      .catch(function (err) {
+        // Covers both a real network failure and a timeout/abort — either
+        // way nothing was stored, so a fresh tap on this same screen is a
+        // clean retry, never a stuck or phantom ticket.
         btn.disabled = false;
         $('start-status').className = 'status error';
-        $('start-status').textContent = "Couldn't start that — check your connection and try again.";
+        $('start-status').textContent = (err && err.name === 'AbortError')
+          ? "Taking longer than expected — try again in a bit."
+          : "Couldn't start that — check your connection and try again.";
       });
   }
 
@@ -289,7 +316,7 @@
     $('arrived-status').className = 'status';
     $('arrived-status').textContent = '';
 
-    fetch('/api/wait-finish', {
+    fetchWithTimeout('/api/wait-finish', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ business: business, ticketId: ticketId }),
@@ -313,13 +340,16 @@
         }
         showScreen('screen-done');
       })
-      .catch(function () {
-        // A real network failure — we don't know if the server actually
-        // processed this, so leave the ticketId in place and let the
-        // customer try tapping again rather than silently losing their spot.
+      .catch(function (err) {
+        // A real network failure OR a timeout/abort — either way we don't
+        // know if the server actually processed this, so leave the
+        // ticketId in place (never cleared here) and let the customer try
+        // tapping again rather than silently losing their spot.
         btn.disabled = false;
         $('arrived-status').className = 'status error';
-        $('arrived-status').textContent = "Couldn't send that — check your connection and try again.";
+        $('arrived-status').textContent = (err && err.name === 'AbortError')
+          ? "Taking longer than expected — try again in a bit."
+          : "Couldn't send that — check your connection and try again.";
       });
   }
 

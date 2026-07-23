@@ -449,8 +449,25 @@
     });
   }
 
+  // FETCH TIMEOUT KILL-SWITCH — same helper as index.html, duplicated
+  // locally here rather than shared (this codebase's own established
+  // convention, no shared module between these files). Without this, a
+  // hung /api/qr-stickers request (dropped connection, a Vercel outage)
+  // leaves "Loading your bindings…" showing forever with no way forward.
+  var FETCH_TIMEOUT_MS = 12000;
+  function fetchWithTimeout(url, options, timeoutMs) {
+    timeoutMs = timeoutMs || FETCH_TIMEOUT_MS;
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+    var opts = Object.assign({}, options || {}, { signal: controller.signal });
+    return fetch(url, opts).finally(function () { clearTimeout(timer); });
+  }
+  function isTimeoutError(err) {
+    return !!err && err.name === 'AbortError';
+  }
+
   function load() {
-    fetch('/api/qr-stickers', { credentials: 'same-origin' })
+    fetchWithTimeout('/api/qr-stickers', { credentials: 'same-origin' })
       .then(function (r) {
         if (r.status === 401) {
           location.href = '/onboarding.html?mode=login';
@@ -468,9 +485,11 @@
         }
         render(res.body);
       })
-      .catch(function () {
+      .catch(function (err) {
         $('load-status').hidden = true;
-        $('error-text').textContent = "Couldn't load your stickers — check your connection and try again.";
+        $('error-text').textContent = isTimeoutError(err)
+          ? 'Taking longer than expected — try again in a bit.'
+          : "Couldn't load your stickers — check your connection and try again.";
         $('error-card').hidden = false;
       });
   }

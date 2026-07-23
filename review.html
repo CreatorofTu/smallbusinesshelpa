@@ -221,6 +221,24 @@
 
   function $(id) { return document.getElementById(id); }
 
+  // fetchWithTimeout — kill-switch for a truly-hung fetch (dead connection,
+  // Vercel outage, etc). Duplicated locally per this codebase's own
+  // convention (no shared module between review.html/wait.html/etc) — if
+  // you fix something here, it does NOT propagate to the other copy.
+  // Aborts at timeoutMs (default 12s) via AbortController; callers detect
+  // the timeout case in their .catch by checking `err.name === 'AbortError'`.
+  var FETCH_TIMEOUT_MS = 12000;
+  function fetchWithTimeout(url, options, timeoutMs) {
+    var ms = timeoutMs || FETCH_TIMEOUT_MS;
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, ms);
+    var opts = Object.assign({}, options, { signal: controller.signal });
+    return fetch(url, opts).then(
+      function (r) { clearTimeout(timer); return r; },
+      function (err) { clearTimeout(timer); throw err; }
+    );
+  }
+
   function escapeHtml(str) {
     return String(str == null ? '' : str).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -368,7 +386,7 @@
 
   function loadQuestions() {
     var url = '/api/qr-questions?business=' + encodeURIComponent(business) + (item ? '&item=' + encodeURIComponent(item) : '');
-    fetch(url)
+    fetchWithTimeout(url, {})
       .then(function (r) {
         if (!r.ok) throw new Error('load-failed');
         return r.json();
@@ -377,8 +395,10 @@
         if (!data || data.ok !== true) throw new Error('load-failed');
         render(data);
       })
-      .catch(function () {
-        $('error-message').textContent = "This code doesn't look right. Try scanning it again.";
+      .catch(function (err) {
+        $('error-message').textContent = (err && err.name === 'AbortError')
+          ? "Taking longer than expected. Try again in a bit."
+          : "This code doesn't look right. Try scanning it again.";
         showScreen('screen-error');
       });
   }
@@ -399,7 +419,7 @@
       coreProduct: state.coreProduct,
     };
 
-    fetch('/api/submit-review', {
+    fetchWithTimeout('/api/submit-review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -414,10 +434,12 @@
         }
         showScreen('screen-done');
       })
-      .catch(function () {
+      .catch(function (err) {
         btn.disabled = false;
         $('form-status').className = 'status error';
-        $('form-status').textContent = "Couldn't send that — check your connection and try again.";
+        $('form-status').textContent = (err && err.name === 'AbortError')
+          ? "Taking longer than expected — try again in a bit."
+          : "Couldn't send that — check your connection and try again.";
       });
   }
 

@@ -472,6 +472,27 @@
     try { return localStorage.getItem(ACCOUNT_ID_KEY) || ''; } catch (err) { return ''; }
   }
 
+  // FETCH TIMEOUT KILL-SWITCH — a hung request (dropped connection, a
+  // Vercel/Anthropic outage) otherwise never resolves and leaves whatever
+  // status text called it ("Reading…", "Saving…", etc.) stuck forever, with
+  // its button disabled the whole time. Every blocking fetch() on this page
+  // goes through this instead of the bare global — same helper duplicated
+  // locally in qr-stickers.html (this codebase's own established
+  // convention, no shared module between these files). isTimeoutError()
+  // lets each catch block show a calm "try again in a bit" line instead of
+  // the raw AbortError name/message a plain err.message would surface.
+  const FETCH_TIMEOUT_MS = 12000;
+  function fetchWithTimeout(url, options, timeoutMs) {
+    timeoutMs = timeoutMs || FETCH_TIMEOUT_MS;
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+    const opts = Object.assign({}, options || {}, { signal: controller.signal });
+    return fetch(url, opts).finally(function () { clearTimeout(timer); });
+  }
+  function isTimeoutError(err) {
+    return !!err && err.name === 'AbortError';
+  }
+
   async function subscribeToPush() {
     const registration = await navigator.serviceWorker.ready;
     let subscription = await registration.pushManager.getSubscription();
@@ -489,7 +510,7 @@
       // this body — accountId is only read locally to decide whether it's
       // worth calling at all (no account yet on this device = nothing to
       // subscribe to server-side).
-      await fetch('/api/subscribe', {
+      await fetchWithTimeout('/api/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -529,7 +550,7 @@
       // exposure than the POST-body form other endpoints use, since it's the
       // one thing these endpoints check and query strings are more likely to
       // land in access logs / browser history).
-      const res = await fetch('/api/log-summary?today=' + localDateString(), { credentials: 'same-origin' });
+      const res = await fetchWithTimeout('/api/log-summary?today=' + localDateString(), { credentials: 'same-origin' });
       if (res.status === 401) {
         // Session cookie missing/expired but this device still thinks it has
         // an account — don't loop forever on a call that will never
@@ -664,7 +685,7 @@
         sales: Number(els.logSales.value),
         note: els.logNote.value.trim(),
       };
-      const res = await fetch('/api/log-entry', {
+      const res = await fetchWithTimeout('/api/log-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -681,7 +702,9 @@
         els.logStatus.textContent = 'Could not save that — check the numbers and try again.';
       }
     } catch (err) {
-      els.logStatus.textContent = 'Something went wrong: ' + err.message;
+      els.logStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
     } finally {
       submitBtn.disabled = false;
     }
@@ -699,7 +722,9 @@
         els.enableStatus.textContent = 'No alerts for now — you can turn this on later from your phone\'s settings.';
       }
     } catch (err) {
-      els.enableStatus.textContent = 'Something went wrong turning that on: ' + err.message;
+      els.enableStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong turning that on: ' + err.message;
     } finally {
       els.enableBtn.disabled = false;
       render();
@@ -720,7 +745,7 @@
       // AUTHORIZATION NOTE: same as every other account-scoped call on this
       // page — the server derives the account from the signed session
       // cookie sent automatically with this same-origin request.
-      const res = await fetch('/api/generate-directive', {
+      const res = await fetchWithTimeout('/api/generate-directive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -754,7 +779,9 @@
         els.readCaveat.textContent = "This read is based on what customers told us and your sales numbers — we're not tracking recipe or price changes yet.";
       }
     } catch (err) {
-      els.readStatus.textContent = 'Something went wrong: ' + err.message;
+      els.readStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
     } finally {
       els.readBtn.disabled = false;
     }
@@ -806,7 +833,7 @@
     els.goalSetCard.hidden = true;
     els.goalBlock.hidden = true;
     try {
-      const res = await fetch('/api/generate-goal-questions', {
+      const res = await fetchWithTimeout('/api/generate-goal-questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -846,7 +873,9 @@
       els.goalFeasibilityText.textContent = data.overallGuidance || feasibilityLine || 'Keep logging — nothing here has cleared what\'s normal for your business yet.';
       renderGoalItems(data.itemQuestions);
     } catch (err) {
-      els.goalStatus.textContent = 'Something went wrong: ' + err.message;
+      els.goalStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
     } finally {
       els.goalBtn.disabled = false;
     }
@@ -858,7 +887,7 @@
     submitBtn.disabled = true;
     els.goalStatus.textContent = 'Saving…';
     try {
-      const res = await fetch('/api/save-profile', {
+      const res = await fetchWithTimeout('/api/save-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -878,7 +907,9 @@
       els.goalStatus.textContent = '';
       await handleGoalClick();
     } catch (err) {
-      els.goalStatus.textContent = 'Something went wrong: ' + err.message;
+      els.goalStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
     } finally {
       submitBtn.disabled = false;
     }
@@ -895,14 +926,16 @@
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
-      const res = await fetch('/api/send-test-push', {
+      const res = await fetchWithTimeout('/api/send-test-push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription }),
       });
       els.testStatus.textContent = res.ok ? 'Sent — check your notifications.' : 'Could not send that test push.';
     } catch (err) {
-      els.testStatus.textContent = 'Something went wrong: ' + err.message;
+      els.testStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
     } finally {
       els.testBtn.disabled = false;
     }
