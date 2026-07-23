@@ -95,6 +95,22 @@ function sanitizeSchedule(raw) {
   return cleaned.every(Boolean) ? cleaned : null;
 }
 
+// GOAL MODE (new, additive field — see api/generate-goal-questions.js).
+// "Here's your baseline, not set a vision" per the founder's own framing:
+// a goal is always a metric + a target number set alongside a real, already-
+// computed baseline the owner actually sees first — never an invented
+// vision captured with no reference point. Overwritten wholesale on every
+// set (no history of past goals kept — same "today only" simplicity this
+// file already uses for schedule/product).
+const GOAL_METRICS = ['customers', 'sales'];
+function sanitizeGoal(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const metric = GOAL_METRICS.indexOf(raw.metric) !== -1 ? raw.metric : null;
+  const target = Number(raw.target);
+  if (!metric || !Number.isFinite(target) || target < 0) return null;
+  return { metric: metric, target: target, setAt: new Date().toISOString() };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -159,6 +175,11 @@ module.exports = async function handler(req, res) {
     if (body.schedule !== undefined) {
       const schedule = sanitizeSchedule(body.schedule);
       if (schedule) profile.schedule = schedule;
+    }
+
+    if (body.goal !== undefined) {
+      const goal = sanitizeGoal(body.goal);
+      if (goal) profile.goal = goal;
     }
 
     if (body.completed === true) {

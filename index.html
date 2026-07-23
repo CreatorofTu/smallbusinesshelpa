@@ -177,6 +177,29 @@
   .tertiary-link:hover { color: var(--ink); }
   .tertiary-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
 
+  select {
+    font-size: 16px;
+    padding: .55em .65em;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    width: 100%;
+  }
+  select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+  .item-question {
+    border-top: 1px solid var(--line);
+    padding: .7rem 0 0;
+    margin-top: .7rem;
+  }
+  .item-question:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+  .item-question-subject { font-weight: 700; font-size: .92rem; margin: 0 0 .3rem; }
+  .item-question ul { margin: 0 0 .35rem; padding-left: 1.1rem; }
+  .item-question li { font-size: .92rem; line-height: 1.45; }
+  .item-question-rationale { font-size: .82rem; color: var(--ink-soft); margin: 0; }
+
 </style>
 </head>
 <body>
@@ -276,6 +299,42 @@
       <p class="directive-text" id="summary-text"></p>
     </div>
 
+    <button class="tertiary-link" id="read-btn" type="button">Get today's read</button>
+    <div class="status" id="read-status"></div>
+    <div class="summary-block" id="read-block" hidden>
+      <p class="summary-label">Today's read</p>
+      <p class="directive-text" id="read-text"></p>
+    </div>
+
+    <button class="tertiary-link" id="goal-btn" type="button">Goal mode</button>
+    <div class="status" id="goal-status"></div>
+
+    <div class="card" id="goal-set-card" hidden>
+      <strong>Your baseline</strong>
+      <p class="soft" id="goal-baseline-text"></p>
+      <form id="goal-form">
+        <div class="field-row">
+          <label>Goal
+            <select id="goal-metric">
+              <option value="customers">Customers/day</option>
+              <option value="sales">Sales/day ($)</option>
+            </select>
+          </label>
+          <label>Target
+            <input type="number" id="goal-target" inputmode="decimal" min="0" step="0.01" required>
+          </label>
+        </div>
+        <button type="submit">Set goal</button>
+      </form>
+    </div>
+
+    <div class="summary-block" id="goal-block" hidden>
+      <p class="summary-label" id="goal-summary-label">Goal mode</p>
+      <p class="directive-text" id="goal-feasibility-text"></p>
+      <div id="goal-items"></div>
+      <button class="tertiary-link" id="goal-change-btn" type="button">Change goal</button>
+    </div>
+
     <button class="tertiary-link" id="test-btn" type="button">Send a test push</button>
     <div class="status" id="test-status"></div>
   </div>
@@ -310,6 +369,21 @@
     logStatus: document.getElementById('log-status'),
     summaryBlock: document.getElementById('summary-block'),
     summaryText: document.getElementById('summary-text'),
+    readBtn: document.getElementById('read-btn'),
+    readStatus: document.getElementById('read-status'),
+    readBlock: document.getElementById('read-block'),
+    readText: document.getElementById('read-text'),
+    goalBtn: document.getElementById('goal-btn'),
+    goalStatus: document.getElementById('goal-status'),
+    goalSetCard: document.getElementById('goal-set-card'),
+    goalBaselineText: document.getElementById('goal-baseline-text'),
+    goalForm: document.getElementById('goal-form'),
+    goalMetric: document.getElementById('goal-metric'),
+    goalTarget: document.getElementById('goal-target'),
+    goalBlock: document.getElementById('goal-block'),
+    goalFeasibilityText: document.getElementById('goal-feasibility-text'),
+    goalItems: document.getElementById('goal-items'),
+    goalChangeBtn: document.getElementById('goal-change-btn'),
     testBtn: document.getElementById('test-btn'),
     testStatus: document.getElementById('test-status'),
     deniedCard: document.getElementById('denied-card'),
@@ -599,6 +673,178 @@
     }
   }
 
+  async function handleGetRead() {
+    const accountId = getAccountId();
+    if (!accountId) {
+      location.href = '/onboarding.html?mode=login';
+      return;
+    }
+    els.readBtn.disabled = true;
+    els.readStatus.textContent = 'Reading…';
+    els.readBlock.hidden = true;
+    try {
+      // AUTHORIZATION NOTE: same as every other account-scoped call on this
+      // page — the server derives the account from the signed session
+      // cookie sent automatically with this same-origin request.
+      const res = await fetch('/api/generate-directive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ today: localDateString() }),
+      });
+      if (res.status === 401) {
+        els.readStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      if (!res.ok) {
+        els.readStatus.textContent = "Couldn't get a read right now — try again in a bit.";
+        return;
+      }
+      const data = await res.json();
+      if (data.configured === false) {
+        els.readStatus.textContent = data.message;
+        return;
+      }
+      els.readStatus.textContent = '';
+      els.readBlock.hidden = false;
+      els.readText.textContent = data.directive || data.diagnosticOnlyLead || data.message || "Keep logging — nothing here has cleared what's normal for your business yet.";
+    } catch (err) {
+      els.readStatus.textContent = 'Something went wrong: ' + err.message;
+    } finally {
+      els.readBtn.disabled = false;
+    }
+  }
+
+  function formatMetric(metric, value) {
+    const rounded = Math.round(value * 10) / 10;
+    return metric === 'sales' ? ('$' + rounded.toFixed(2)) : (rounded + ' customers/day');
+  }
+
+  function renderGoalItems(itemQuestions) {
+    els.goalItems.innerHTML = '';
+    (itemQuestions || []).forEach(function (entry) {
+      const wrap = document.createElement('div');
+      wrap.className = 'item-question';
+      const subj = document.createElement('p');
+      subj.className = 'item-question-subject';
+      subj.textContent = entry.subject || '';
+      wrap.appendChild(subj);
+      const ul = document.createElement('ul');
+      (entry.questions || []).forEach(function (q) {
+        const li = document.createElement('li');
+        li.textContent = q;
+        ul.appendChild(li);
+      });
+      wrap.appendChild(ul);
+      if (entry.rationale) {
+        const rationale = document.createElement('p');
+        rationale.className = 'item-question-rationale';
+        rationale.textContent = entry.rationale;
+        wrap.appendChild(rationale);
+      }
+      els.goalItems.appendChild(wrap);
+    });
+  }
+
+  // Fetches the account's real baseline plus, if a goal is already set, the
+  // goal-mode item-question plan. Showing the baseline itself is free (pure
+  // arithmetic, server-side) — only fetching the item-question plan needs
+  // the model, and only once a real goal exists on top of that baseline.
+  async function handleGoalClick() {
+    const accountId = getAccountId();
+    if (!accountId) {
+      location.href = '/onboarding.html?mode=login';
+      return;
+    }
+    els.goalBtn.disabled = true;
+    els.goalStatus.textContent = 'Reading…';
+    els.goalSetCard.hidden = true;
+    els.goalBlock.hidden = true;
+    try {
+      const res = await fetch('/api/generate-goal-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ today: localDateString() }),
+      });
+      if (res.status === 401) {
+        els.goalStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      if (!res.ok) {
+        els.goalStatus.textContent = "Couldn't get a read right now — try again in a bit.";
+        return;
+      }
+      const data = await res.json();
+      els.goalStatus.textContent = '';
+
+      if (!data.goalSet) {
+        els.goalBaselineText.textContent = data.baseline && data.baseline.daysLogged > 0
+          ? ('So far: ' + formatMetric('customers', data.baseline.avgCustomers) + ', ' + formatMetric('sales', data.baseline.avgSales) + ' on average'
+              + (data.baseline.stage === 'provisional' ? ' (still a rough, early read).' : '.'))
+          : data.message;
+        els.goalSetCard.hidden = false;
+        return;
+      }
+
+      if (data.configured === false || (data.itemQuestions === undefined && data.message)) {
+        els.goalStatus.textContent = data.message;
+        if (data.baseline) {
+          els.goalBaselineText.textContent = 'Baseline: ' + formatMetric(data.goal ? data.goal.metric : 'customers', data.goal ? (data.goal.metric === 'sales' ? data.baseline.avgSales : data.baseline.avgCustomers) : 0);
+        }
+        return;
+      }
+
+      els.goalBlock.hidden = false;
+      const feasibilityLine = data.feasibility ? data.feasibility.label : '';
+      els.goalFeasibilityText.textContent = data.overallGuidance || feasibilityLine || 'Keep logging — nothing here has cleared what\'s normal for your business yet.';
+      renderGoalItems(data.itemQuestions);
+    } catch (err) {
+      els.goalStatus.textContent = 'Something went wrong: ' + err.message;
+    } finally {
+      els.goalBtn.disabled = false;
+    }
+  }
+
+  async function handleGoalFormSubmit(e) {
+    e.preventDefault();
+    const submitBtn = els.goalForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    els.goalStatus.textContent = 'Saving…';
+    try {
+      const res = await fetch('/api/save-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          goal: { metric: els.goalMetric.value, target: Number(els.goalTarget.value) },
+        }),
+      });
+      if (res.status === 401) {
+        els.goalStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      if (!res.ok) {
+        els.goalStatus.textContent = 'Could not save that goal — try again.';
+        return;
+      }
+      els.goalStatus.textContent = '';
+      await handleGoalClick();
+    } catch (err) {
+      els.goalStatus.textContent = 'Something went wrong: ' + err.message;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  function handleGoalChange() {
+    els.goalBlock.hidden = true;
+    els.goalSetCard.hidden = false;
+  }
+
   async function handleTestPush() {
     els.testBtn.disabled = true;
     els.testStatus.textContent = 'Sending…';
@@ -623,6 +869,10 @@
     els.loginBtn.addEventListener('click', handleLoginClick);
     els.chromeInstallBtn.addEventListener('click', handleChromeInstall);
     els.enableBtn.addEventListener('click', handleEnable);
+    els.readBtn.addEventListener('click', handleGetRead);
+    els.goalBtn.addEventListener('click', handleGoalClick);
+    els.goalForm.addEventListener('submit', handleGoalFormSubmit);
+    els.goalChangeBtn.addEventListener('click', handleGoalChange);
     els.testBtn.addEventListener('click', handleTestPush);
     els.logForm.addEventListener('submit', handleLogSubmit);
 
