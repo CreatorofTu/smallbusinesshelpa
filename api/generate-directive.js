@@ -1184,30 +1184,31 @@ async function callAnthropic(systemPrompt) {
   return res.json();
 }
 
-module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
-
-  try {
-    const session = getSessionFromRequest(req);
-    if (!session) {
-      res.status(401).json({ error: 'Not logged in' });
-      return;
-    }
-    const accountId = session.accountId;
-
-    const { today } = req.body || {};
-    if (!today || typeof today !== 'string' || !DATE_RE.test(today)) {
-      res.status(400).json({ error: 'Missing or malformed today' });
-      return;
-    }
-    if (!isWithinServerDateWindow(today, CACHE_KEY_DATE_WINDOW_DAYS)) {
-      res.status(400).json({ error: 'today is outside the allowed date window' });
-      return;
-    }
-
+// ============================================================
+// computeDirectiveForAccount(accountId, today) — the whole "compute one
+// business's directive for one date" pipeline, extracted from the HTTP
+// handler below so a cron (api/cron-anomaly-push.js) can run it directly
+// for many accounts with no HTTP layer involved. Deliberately knows nothing
+// about req/res/session cookies — accountId and today arrive as plain,
+// ALREADY-VALIDATED arguments (the HTTP handler still does its own method/
+// session/DATE_RE/date-window checks before calling this; the cron derives
+// both values server-side itself, so neither caller can hand this an
+// unvetted value).
+//
+// Returns, in every branch, the exact same plain object the HTTP handler
+// previously passed to res.status(200).json(...) — the keep-logging body,
+// the not-configured body, a cache hit, the "couldn't get a read" model-
+// failure bodies, or the real cached-and-returned verdict. Unexpected
+// errors (kv outage, etc.) THROW rather than being swallowed here: the
+// HTTP handler's own try/catch turns them into the same generic 500 it
+// always sent, and the cron's per-account try/catch counts them as a
+// per-account failure without aborting the run.
+// ============================================================
+// NOTE on indentation: the body below keeps its original 4-space indent from
+// its previous life inside the HTTP handler's try block — deliberately left
+// untouched so the extraction diff shows only the real structural changes
+// (res.json(...) -> return ...), not 180 lines of reindentation.
+async function computeDirectiveForAccount(accountId, today) {
     const anchorMs = parseDateUTC(today);
     const thisWeekDates = windowDates(anchorMs, 6, 0);
     const lastWeekDates = windowDates(anchorMs, 13, 7);
@@ -1250,13 +1251,11 @@ module.exports = async function handler(req, res) {
     // noise-floor-vs-outcome reasoning below for calls that DO pass this
     // basic floor — it only short-circuits the clearly-insufficient case.
     if (thisWeek.entryCount < MIN_ENTRIES_PER_WEEK || lastWeek.entryCount < MIN_ENTRIES_PER_WEEK) {
-      res.status(200).json(Object.assign({ dataGaps: CAUSAL_DATA_GAPS }, keepLoggingResponse(baselineData.stage)));
-      return;
+      return Object.assign({ dataGaps: CAUSAL_DATA_GAPS }, keepLoggingResponse(baselineData.stage));
     }
 
     if (!process.env.ANTHROPIC_API_KEY) {
-      res.status(200).json(notConfiguredResponse());
-      return;
+      return notConfiguredResponse();
     }
 
     // Cache check — see DIRECTIVE_CACHE_TTL_SECONDS above. Only wraps the
@@ -1265,8 +1264,7 @@ module.exports = async function handler(req, res) {
     const cacheKey = directiveCacheKey(accountId, today);
     const cachedResponse = await kv.get(cacheKey).catch(() => null);
     if (cachedResponse) {
-      res.status(200).json(cachedResponse);
-      return;
+      return cachedResponse;
     }
 
     const { business, coreProducts } = reshapeProfileToRepoShape(profile);
@@ -1342,25 +1340,23 @@ module.exports = async function handler(req, res) {
       // Never let an Anthropic-side failure (rate limit, 5xx, network
       // blip) surface as a 500 to the app — same "ships safely" posture as
       // the not-configured case above, just for a different honest reason.
-      res.status(200).json({
+      return {
         ok: true,
         configured: true,
         confidenceTier: null,
         directive: null,
         message: "Couldn't get a read right now — try again in a bit.",
-      });
-      return;
+      };
     }
 
     if (apiResponse.stop_reason === 'refusal') {
-      res.status(200).json({
+      return {
         ok: true,
         configured: true,
         confidenceTier: null,
         directive: null,
         message: "Couldn't get a read right now — try again in a bit.",
-      });
-      return;
+      };
     }
 
     const textBlock = Array.isArray(apiResponse.content) ? apiResponse.content.find((b) => b.type === 'text') : null;
@@ -1368,14 +1364,13 @@ module.exports = async function handler(req, res) {
     try {
       verdict = JSON.parse(textBlock && textBlock.text);
     } catch (err) {
-      res.status(200).json({
+      return {
         ok: true,
         configured: true,
         confidenceTier: null,
         directive: null,
         message: "Couldn't get a read right now — try again in a bit.",
-      });
-      return;
+      };
     }
 
     verdict = enforceConfidenceInvariants(verdict, baselineData, outcomeMove);
@@ -1384,6 +1379,38 @@ module.exports = async function handler(req, res) {
     // Best-effort cache write — never let a cache failure turn a real,
     // already-computed verdict into a 500.
     await kv.set(cacheKey, responseBody, { ex: DIRECTIVE_CACHE_TTL_SECONDS }).catch(() => {});
+    return responseBody;
+}
+
+// Thin HTTP wrapper — all request-shaped concerns (method, session cookie,
+// `today` shape + server-date-window bounds) stay here; everything the
+// endpoint actually computes lives in computeDirectiveForAccount() above,
+// which this calls and returns verbatim as the 200 body.
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      res.status(401).json({ error: 'Not logged in' });
+      return;
+    }
+    const accountId = session.accountId;
+
+    const { today } = req.body || {};
+    if (!today || typeof today !== 'string' || !DATE_RE.test(today)) {
+      res.status(400).json({ error: 'Missing or malformed today' });
+      return;
+    }
+    if (!isWithinServerDateWindow(today, CACHE_KEY_DATE_WINDOW_DAYS)) {
+      res.status(400).json({ error: 'today is outside the allowed date window' });
+      return;
+    }
+
+    const responseBody = await computeDirectiveForAccount(accountId, today);
     res.status(200).json(responseBody);
   } catch (err) {
     // Same deliberate stricter error-handling convention as log-entry.js /
@@ -1392,3 +1419,8 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: 'Something went wrong.' });
   }
 };
+
+// Named export alongside the default handler export, so the anomaly-push
+// cron (api/cron-anomaly-push.js) can require() the compute pipeline
+// directly — no HTTP self-call, no session cookie involved.
+module.exports.computeDirectiveForAccount = computeDirectiveForAccount;

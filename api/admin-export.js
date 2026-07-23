@@ -56,7 +56,9 @@ const { safeCompare } = require('./_safe-compare');
 // qrattempts:*, qrgenattempts:*, itemquestions:*, itemquestionslock:*,
 // stickerscanattempts:*, waitticket:*, waitstartattempts:*,
 // waitfinishattempts:*, directivecache:*, goalquestionscache:*,
-// invparseattempts:*. None of these prefixes are ever touched by the
+// invparseattempts:*, anomalypushsent:* (cron-anomaly-push.js's TTL'd
+// "already pushed for this date" marker — losing it costs at worst one
+// duplicate push). None of these prefixes are ever touched by the
 // targeted kv.keys() calls below (account:*, profile:*, waitlog:<id>:*) or
 // by any of the fixed-key reads, so nothing further needs to filter them
 // out — they're simply never reached.
