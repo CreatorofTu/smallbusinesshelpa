@@ -264,6 +264,20 @@
   .history-row-values { font-size: .9rem; color: var(--ink-soft); margin: .15rem 0 0; }
   .history-edit-form { margin-top: .6rem; }
 
+  /* Ask-your-AI-manager (confirm-then-delay) — see the section's HTML
+     comment. The Stop/Redirect escape hatches are DELIBERATELY identical:
+     same element, same class, same size, side by side at equal flex width.
+     This is an explicit anti-dark-pattern product requirement carried over
+     from the consent-demo design (PRODUCT-CONTEXT.md, "The separate,
+     simulated pitch-demo artifact") — neither may ever be styled as the
+     bigger/filled/"primary" action. Do not restyle one without the other.
+     Both toggled containers rely on the global [hidden] !important
+     catch-all at the top of this stylesheet, so the explicit display here
+     can't reintroduce the display-beats-[hidden] bug. */
+  #task-countdown-view { display: flex; flex-direction: column; gap: .75rem; }
+  .task-escape-row { display: flex; gap: .75rem; }
+  .task-escape-row button { flex: 1; align-self: auto; }
+
 </style>
 </head>
 <body>
@@ -416,6 +430,43 @@
       <button class="tertiary-link" id="goal-change-btn" type="button">Change goal</button>
     </div>
 
+    <!-- Ask your AI manager — the confirm-then-delay consent mechanic
+         (PRODUCT-CONTEXT.md, "Trust, consent, and the baseline mechanic"),
+         now a real flow against /api/task-request. The owner says what they
+         need ("more brown sugar") with a small cost cap, taps "I'm getting
+         it" once, and a live 30-second countdown runs — with Stop and
+         Redirect as two escape hatches of EQUAL visual weight (an explicit
+         anti-dark-pattern requirement; see the .task-escape-row CSS
+         comment). If the countdown hits zero untouched, the client posts
+         `confirm` and shows the server's honest test-mode message — no real
+         tasker platform is connected yet, so nothing real is ordered or
+         charged, and the copy says exactly that (same posture as
+         onboarding.html's "Payment link not connected yet (test mode)").
+         Same findability convention as History above: a plain
+         tertiary-link toggle, no nav. -->
+    <button class="tertiary-link" id="task-btn" type="button">Ask your AI manager</button>
+    <div class="summary-block" id="task-block" hidden>
+      <p class="summary-label">Ask your AI manager</p>
+      <form id="task-form">
+        <label>What do you need?
+          <input type="text" id="task-desc" maxlength="200" placeholder="e.g. more brown sugar" required>
+        </label>
+        <label>Spend up to ($)
+          <input type="number" id="task-cap" inputmode="decimal" min="0.01" max="50" step="0.01" required>
+        </label>
+        <button type="submit">I'm getting it</button>
+      </form>
+      <div id="task-countdown-view" hidden>
+        <p class="soft" id="task-summary"></p>
+        <p class="directive-text" id="task-countdown-text"></p>
+        <div class="task-escape-row">
+          <button type="button" id="task-stop-btn">Stop</button>
+          <button type="button" id="task-redirect-btn">Redirect</button>
+        </div>
+      </div>
+      <div class="status" id="task-status"></div>
+    </div>
+
     <button class="tertiary-link" id="test-btn" type="button">Send a test push</button>
     <div class="status" id="test-status"></div>
   </div>
@@ -526,6 +577,17 @@
     goalFeasibilityText: document.getElementById('goal-feasibility-text'),
     goalItems: document.getElementById('goal-items'),
     goalChangeBtn: document.getElementById('goal-change-btn'),
+    taskBtn: document.getElementById('task-btn'),
+    taskBlock: document.getElementById('task-block'),
+    taskForm: document.getElementById('task-form'),
+    taskDesc: document.getElementById('task-desc'),
+    taskCap: document.getElementById('task-cap'),
+    taskCountdownView: document.getElementById('task-countdown-view'),
+    taskSummary: document.getElementById('task-summary'),
+    taskCountdownText: document.getElementById('task-countdown-text'),
+    taskStopBtn: document.getElementById('task-stop-btn'),
+    taskRedirectBtn: document.getElementById('task-redirect-btn'),
+    taskStatus: document.getElementById('task-status'),
     testBtn: document.getElementById('test-btn'),
     testStatus: document.getElementById('test-status'),
     upgradeCard: document.getElementById('upgrade-card'),
@@ -797,6 +859,7 @@
       maybeShowReadReveal();
       maybeShowContextCollection();
       maybeShowUpgradeCard();
+      maybeResumeTaskRequest();
     }
   }
 
@@ -1269,6 +1332,231 @@
     return row;
   }
 
+  // ---- Ask your AI manager: confirm-then-delay task requests ----
+  // The consent mechanic from PRODUCT-CONTEXT.md's "Trust, consent, and the
+  // baseline mechanic": intent expressed once -> live countdown -> equal-
+  // weight Stop/Redirect escape hatches -> only an untouched zero posts
+  // `confirm` (which today is honest test mode server-side — see
+  // api/task-request.js's header). The countdown lives HERE, in the
+  // browser: the server has no background runner, so a pending record can
+  // never execute without a live tab counting down and asking it to.
+  //
+  // 30 seconds — JUDGMENT CALL for the reviewer: long enough to be a real
+  // reconsideration window (read the summary, change your mind, reach the
+  // button), short enough not to feel like the app is stalling on purpose.
+  // The demo artifact never pinned a number; nothing else depends on this.
+  const TASK_COUNTDOWN_SECONDS = 30;
+
+  let taskTimer = null;
+  let taskActive = null; // the in-flight pending record, or null
+  let taskResumeChecked = false;
+
+  function handleTaskToggle() {
+    els.taskBlock.hidden = !els.taskBlock.hidden;
+  }
+
+  function clearTaskTimer() {
+    if (taskTimer) {
+      clearInterval(taskTimer);
+      taskTimer = null;
+    }
+  }
+
+  function showTaskForm() {
+    els.taskCountdownView.hidden = true;
+    els.taskForm.hidden = false;
+  }
+
+  function startTaskCountdown(record, seconds) {
+    taskActive = record;
+    clearTaskTimer();
+    els.taskForm.hidden = true;
+    els.taskCountdownView.hidden = false;
+    els.taskStopBtn.disabled = false;
+    els.taskRedirectBtn.disabled = false;
+    els.taskStatus.textContent = '';
+    // textContent only — the description is the owner's own typed text and
+    // must never be interpreted as markup (same rule as buildHistoryRow).
+    els.taskSummary.textContent =
+      'Getting: ' + record.description + ' — spending up to $' + Number(record.costCapDollars).toFixed(2);
+    let remaining = seconds;
+    els.taskCountdownText.textContent = 'Happening in ' + remaining + '…';
+    taskTimer = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearTaskTimer();
+        els.taskCountdownText.textContent = 'Happening now…';
+        fireTaskConfirm();
+        return;
+      }
+      els.taskCountdownText.textContent = 'Happening in ' + remaining + '…';
+    }, 1000);
+  }
+
+  async function handleTaskSubmit(e) {
+    e.preventDefault();
+    const description = els.taskDesc.value.trim();
+    const cap = Number(els.taskCap.value);
+    if (!description || !Number.isFinite(cap) || cap <= 0) return; // input attrs already enforce this; belt and suspenders
+    const submitBtn = els.taskForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    els.taskStatus.textContent = 'Sending…';
+    try {
+      // AUTHORIZATION NOTE: same as every other account-scoped call on this
+      // page — the server derives the account from the signed session
+      // cookie sent automatically with this same-origin request.
+      const res = await fetchWithTimeout('/api/task-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action: 'create', description: description, costCapDollars: cap }),
+      });
+      if (res.status === 401) {
+        els.taskStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      let data = null;
+      try { data = await res.json(); } catch (err) {}
+      if (!res.ok || !data || !data.id) {
+        // The server's own error copy is already written for the owner —
+        // show it as-is when present (same convention as handleUpgradeClick).
+        els.taskStatus.textContent = (data && data.error) || 'Could not send that — check it and try again.';
+        return;
+      }
+      startTaskCountdown({ id: data.id, description: description, costCapDollars: cap }, TASK_COUNTDOWN_SECONDS);
+    } catch (err) {
+      els.taskStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  // Stop and Redirect share one handler — they are the same shape of action
+  // (kill the countdown, resolve the record) differing only in where the
+  // owner lands after: Stop ends it, Redirect hands back the pre-filled
+  // form so they can edit what they asked for instead of starting over.
+  async function handleTaskEscape(action) {
+    const record = taskActive;
+    if (!record) return;
+    // Kill the clock FIRST, before any network round-trip — once either
+    // escape hatch is pressed, the countdown must never reach zero and
+    // fire `confirm` behind the in-flight request.
+    clearTaskTimer();
+    els.taskStopBtn.disabled = true;
+    els.taskRedirectBtn.disabled = true;
+    try {
+      const res = await fetchWithTimeout('/api/task-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action: action, id: record.id }),
+      });
+      if (res.status === 401) {
+        els.taskStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      if (!res.ok) {
+        // Local countdown is already dead (nothing will execute), but the
+        // server record is still pending — let the owner press again; the
+        // endpoint is idempotent so a repeat is always safe.
+        els.taskStatus.textContent = 'Could not reach the server — press it again.';
+        els.taskStopBtn.disabled = false;
+        els.taskRedirectBtn.disabled = false;
+        return;
+      }
+      taskActive = null;
+      showTaskForm();
+      if (action === 'redirect') {
+        // Pre-filled with what they typed — Redirect means "wait, do
+        // something different instead," an edit, not a restart from blank.
+        els.taskDesc.value = record.description || '';
+        els.taskCap.value = record.costCapDollars != null ? record.costCapDollars : '';
+        els.taskStatus.textContent = 'Okay — change it to what you actually need, then send it again.';
+        els.taskDesc.focus();
+      } else {
+        els.taskForm.reset();
+        els.taskStatus.textContent = 'Stopped — nothing happens.';
+      }
+    } catch (err) {
+      els.taskStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — press it again.'
+        : 'Something went wrong: ' + err.message;
+      els.taskStopBtn.disabled = false;
+      els.taskRedirectBtn.disabled = false;
+    }
+  }
+
+  // Countdown reached zero with neither escape hatch pressed. The server
+  // re-checks the record is still pending (a stale double-fire can never
+  // double-execute) and, today, executes NOTHING real — it returns the
+  // honest test-mode message, which is shown plainly, no fake success
+  // language.
+  async function fireTaskConfirm() {
+    const record = taskActive;
+    if (!record) return;
+    els.taskStopBtn.disabled = true;
+    els.taskRedirectBtn.disabled = true;
+    try {
+      const res = await fetchWithTimeout('/api/task-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action: 'confirm', id: record.id }),
+      });
+      if (res.status === 401) {
+        els.taskStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      let data = null;
+      try { data = await res.json(); } catch (err) {}
+      if (!res.ok || !data) {
+        // Record stays pending server-side; a reload resumes the countdown
+        // (see maybeResumeTaskRequest), so nothing is lost — just say so.
+        els.taskStatus.textContent = 'Could not reach the server — reload to try again.';
+        return;
+      }
+      taskActive = null;
+      showTaskForm();
+      els.taskForm.reset();
+      els.taskStatus.textContent = data.message || 'Resolved — nothing more to do here.';
+    } catch (err) {
+      els.taskStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — reload to try again.'
+        : 'Something went wrong: ' + err.message;
+    }
+  }
+
+  // On page load: one GET to see whether an in-flight pending request
+  // exists (owner reloaded mid-countdown). If so, reopen the section and
+  // resume the countdown rather than silently losing it. Anything already
+  // resolved (stopped/redirected/executed-test-mode) is history, not live
+  // state — never auto-shown. Same once-per-load guard pattern as
+  // maybeShowUpgradeCard above.
+  function maybeResumeTaskRequest() {
+    if (taskResumeChecked) return;
+    taskResumeChecked = true;
+    fetchWithTimeout('/api/task-request', { credentials: 'same-origin' })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data || !data.request || data.request.status !== 'pending') return;
+        const elapsedSeconds = (Date.now() - Date.parse(data.request.createdAt)) / 1000;
+        let remaining = Math.ceil(TASK_COUNTDOWN_SECONDS - elapsedSeconds);
+        // If the window already fully passed while no tab was open, restart
+        // a full countdown instead of executing on arrival — erring on the
+        // side of consent: the owner always sees a real, complete
+        // reconsideration window before anything happens.
+        if (!Number.isFinite(remaining) || remaining < 1) remaining = TASK_COUNTDOWN_SECONDS;
+        els.taskBlock.hidden = false;
+        startTaskCountdown(data.request, remaining);
+      })
+      .catch(function () {});
+  }
+
   function formatMetric(metric, value) {
     const rounded = Math.round(value * 10) / 10;
     return metric === 'sales' ? ('$' + rounded.toFixed(2)) : (rounded + ' customers/day');
@@ -1437,6 +1725,10 @@
     els.goalBtn.addEventListener('click', handleGoalClick);
     els.goalForm.addEventListener('submit', handleGoalFormSubmit);
     els.goalChangeBtn.addEventListener('click', handleGoalChange);
+    els.taskBtn.addEventListener('click', handleTaskToggle);
+    els.taskForm.addEventListener('submit', handleTaskSubmit);
+    els.taskStopBtn.addEventListener('click', function () { handleTaskEscape('stop'); });
+    els.taskRedirectBtn.addEventListener('click', function () { handleTaskEscape('redirect'); });
     els.testBtn.addEventListener('click', handleTestPush);
     els.upgradeBtn.addEventListener('click', handleUpgradeClick);
     els.logForm.addEventListener('submit', handleLogSubmit);
