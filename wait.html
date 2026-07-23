@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quick check-in</title>
+<!--
+  ============================================================
+  wait.html — the real customer-facing wait-time page, per
+  PRODUCT-CONTEXT.md's "customer-tapped wait-time" future idea (now being
+  built) and the resolved design captured for this build (see
+  api/wait-start.js's own header for the full identity/correlation/
+  abandonment design).
+
+  A NEW, SEPARATE page from app/review.html — deliberately NOT bolted onto
+  that file's existing single-shot "load once, answer once, submit once"
+  shape. This page has its own two-tap-across-time flow instead: "I just
+  sat down" now, "my food just arrived" later, on the same phone/tab.
+
+  Same isolation posture as review.html — deliberately a separate,
+  standalone file:
+    - has NO <link rel="manifest">  — a customer scanning a wall-mounted
+      code must never get an "Add to Home Screen" prompt.
+    - registers NO service worker    — no offline/push use case here.
+    - reads/writes NONE of the owner app's localStorage keys or session
+      state — a customer here is a different, anonymous actor, never
+      conflated with the owner.
+    - has no login wall, ever, for anyone landing here.
+
+  IDENTITY, per the resolved design: one single shared QR code for the
+  whole business is enough (app/qr-stickers.html's "Wait-time code" section
+  encodes wait.html?business=<accountId>, no item/table param). A
+  server-issued ticketId (api/wait-start.js) — not which physical sticker
+  got scanned — is what distinguishes one visit from another, so this
+  correctly handles multiple simultaneous tables/parties with zero new
+  physical-sticker infrastructure.
+
+  CORRELATION: this page holds the server-issued ticketId in
+  sessionStorage between the two taps — no login, no device fingerprinting,
+  no "oldest open record" guessing, no claim-code to copy down. A fresh
+  load with nothing in sessionStorage always starts at screen 1.
+
+  ABANDONMENT: if the second tap never happens, the ticket simply expires
+  out of KV on its own (api/wait-start.js's TTL) and is never counted in any
+  average — nothing on this page needs to handle that case specially,
+  except showing a plain "that timer expired" message if a stale ticketId
+  ever gets used after the fact (api/wait-finish.js 404s; see arrivedTap()
+  below).
+
+  Only the VISUAL system (fonts, colors, card/button idioms) is copied from
+  review.html/onboarding.html — copied stylistically, not inherited
+  structurally. If the brand system ever changes, this file needs its own
+  manual update; it does not share a stylesheet with the owner app.
+
+  URL shape: /wait.html?business=<accountId>
+  ============================================================
+-->
+
+<style>
+  @font-face {
+    font-family: 'Fustat';
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+    src: url('/fonts/Fustat-Variable.ttf') format('truetype-variations');
+  }
+
+  :root {
+    --bg: #ffffff;
+    --ink: #000000;
+    --ink-soft: #666666;
+    --line: #e0e0e0;
+    --font: 'Fustat', -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+  }
+  main {
+    width: 100%;
+    max-width: 520px;
+    padding: 2rem 1.25rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .wordmark {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.25rem;
+  }
+  h1 {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.5rem;
+    line-height: 1.3;
+    margin: 0;
+    text-wrap: balance;
+  }
+  p { margin: 0; line-height: 1.55; }
+  .soft { color: var(--ink-soft); font-size: .95rem; }
+
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.4rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%);
+    text-align: center;
+    align-items: center;
+  }
+
+  .disclosure {
+    font-size: .85rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+
+  .big-btn {
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 1.25rem;
+    padding: 1.5rem 1.25rem;
+    border-radius: 16px;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+    cursor: pointer;
+    width: 100%;
+    min-height: 88px; /* one single, big, obvious tap target */
+  }
+  .big-btn:hover { opacity: .85; }
+  .big-btn:disabled { opacity: .45; cursor: default; }
+  .big-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  .status { font-size: .9rem; color: var(--ink-soft); min-height: 1.2em; }
+  .status.error { color: var(--ink); font-weight: 700; }
+
+  .confirm-card {
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 1.6rem 1.2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+  .confirm-card .check { font-size: 2.5rem; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="wordmark">Justaddegg</div>
+
+  <section id="screen-error" hidden>
+    <div class="card">
+      <h1>We couldn't load this</h1>
+      <p class="soft" id="error-message">This code doesn't look right. Try scanning it again.</p>
+    </div>
+  </section>
+
+  <section id="screen-start" hidden>
+    <div class="card">
+      <h1>Just sat down?</h1>
+      <p class="soft">Tap below and we'll start a quiet timer for your visit — it helps the owner see how long people are actually waiting for their food.</p>
+      <button type="button" class="big-btn" id="start-btn">I just sat down</button>
+      <div class="status" id="start-status"></div>
+      <p class="disclosure">No account, no personal info — just a timer between this tap and your next one.</p>
+    </div>
+  </section>
+
+  <section id="screen-arrived" hidden>
+    <div class="card">
+      <h1>Food on the way?</h1>
+      <p class="soft">When it lands on your table, tap below. That's it.</p>
+      <button type="button" class="big-btn" id="arrived-btn">My food just arrived</button>
+      <div class="status" id="arrived-status"></div>
+    </div>
+  </section>
+
+  <section id="screen-done" hidden>
+    <div class="confirm-card">
+      <div class="check">&#10003;</div>
+      <h1>Thanks!</h1>
+      <p class="soft">That's all we needed — enjoy your meal.</p>
+    </div>
+  </section>
+
+  <section id="screen-expired" hidden>
+    <div class="confirm-card">
+      <div class="check">&#10003;</div>
+      <h1>That timer expired</h1>
+      <p class="soft">No worries — thanks for stopping by.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  function $(id) { return document.getElementById(id); }
+
+  var SCREENS = ['screen-error', 'screen-start', 'screen-arrived', 'screen-done', 'screen-expired'];
+  function showScreen(id) {
+    SCREENS.forEach(function (s) { $(s).hidden = (s !== id); });
+  }
+
+  var params = new URLSearchParams(window.location.search);
+  var business = (params.get('business') || '').trim();
+
+  if (!business) {
+    $('error-message').textContent = "This link is missing some information. Ask the owner for a fresh QR code.";
+    showScreen('screen-error');
+    return;
+  }
+
+  // sessionStorage, scoped to this specific business — the customer's own
+  // phone/tab holds the server-issued ticketId between the two taps. Never
+  // shared with, or read by, the owner-facing app's own storage keys.
+  var TICKET_KEY = 'jaeWaitTicket:' + business;
+
+  function storedTicketId() {
+    try {
+      return sessionStorage.getItem(TICKET_KEY) || null;
+    } catch (err) {
+      return null; // private browsing / storage disabled — falls back to always starting fresh
+    }
+  }
+  function storeTicketId(ticketId) {
+    try { sessionStorage.setItem(TICKET_KEY, ticketId); } catch (err) { /* ignore */ }
+  }
+  function clearTicketId() {
+    try { sessionStorage.removeItem(TICKET_KEY); } catch (err) { /* ignore */ }
+  }
+
+  function startTap() {
+    var btn = $('start-btn');
+    btn.disabled = true;
+    $('start-status').className = 'status';
+    $('start-status').textContent = '';
+
+    fetch('/api/wait-start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business: business }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.body || res.body.ok !== true || !res.body.ticketId) {
+          btn.disabled = false;
+          $('start-status').className = 'status error';
+          $('start-status').textContent = (res.body && res.body.error) || "Couldn't start that — try again.";
+          return;
+        }
+        storeTicketId(res.body.ticketId);
+        showScreen('screen-arrived');
+      })
+      .catch(function () {
+        btn.disabled = false;
+        $('start-status').className = 'status error';
+        $('start-status').textContent = "Couldn't start that — check your connection and try again.";
+      });
+  }
+
+  function arrivedTap() {
+    var ticketId = storedTicketId();
+    if (!ticketId) {
+      // Nothing to close — shouldn't normally happen (screen-arrived only
+      // ever shows once a ticket is stored), but fall back to a fresh start
+      // rather than getting stuck with a dead button.
+      showScreen('screen-start');
+      return;
+    }
+
+    var btn = $('arrived-btn');
+    btn.disabled = true;
+    $('arrived-status').className = 'status';
+    $('arrived-status').textContent = '';
+
+    fetch('/api/wait-finish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business: business, ticketId: ticketId }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; }); })
+      .then(function (res) {
+        // Whether this succeeds, expires, or hard-fails, this ticketId is
+        // done being useful client-side — a server-side 404/500 both mean
+        // there's nothing left to retry against (see wait-finish.js's own
+        // header: the ticket key is deleted before it can ever fail).
+        clearTicketId();
+        if (res.status === 404) {
+          showScreen('screen-expired');
+          return;
+        }
+        if (!res.ok || !res.body || res.body.ok !== true) {
+          $('arrived-status').className = 'status error';
+          $('arrived-status').textContent = (res.body && res.body.error) || "Couldn't send that — but thanks for stopping by.";
+          showScreen('screen-done');
+          return;
+        }
+        showScreen('screen-done');
+      })
+      .catch(function () {
+        // A real network failure — we don't know if the server actually
+        // processed this, so leave the ticketId in place and let the
+        // customer try tapping again rather than silently losing their spot.
+        btn.disabled = false;
+        $('arrived-status').className = 'status error';
+        $('arrived-status').textContent = "Couldn't send that — check your connection and try again.";
+      });
+  }
+
+  $('start-btn').addEventListener('click', startTap);
+  $('arrived-btn').addEventListener('click', arrivedTap);
+
+  // Fresh load: no stored ticket -> screen 1. Stored ticket -> screen 2, so
+  // a reload between the two taps doesn't lose the customer's place.
+  showScreen(storedTicketId() ? 'screen-arrived' : 'screen-start');
+})();
+</script>
+</body>
+</html>

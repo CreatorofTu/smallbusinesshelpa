@@ -279,6 +279,27 @@
       </div>
     </div>
   </div>
+
+  <!-- Independent of bindings, same as the general code above — the
+       wait-time code only needs the account id. ONE shared code for the
+       whole business, not one per table: identity lives in the server-
+       issued ticketId app/wait.html mints (api/wait-start.js), not in which
+       physical sticker got scanned, so this same code correctly handles
+       multiple simultaneous tables/parties with no per-table printing. -->
+  <div class="general-section" id="wait-section" hidden>
+    <div class="no-print">
+      <h2>Wait-time code</h2>
+      <p class="soft">One shared code for the whole business — a customer taps "I just sat down," then later taps "my food just arrived." No per-table code needed; each visit gets its own timer.</p>
+    </div>
+    <div class="sticker-grid">
+      <div class="sticker-card" id="wait-card">
+        <p class="sticker-name">Wait-time timer</p>
+        <p class="sticker-meta">Wait-time code</p>
+        <canvas class="qr-canvas" id="wait-qr-canvas" role="img"></canvas>
+        <p class="sticker-url" id="wait-url"></p>
+      </div>
+    </div>
+  </div>
 </main>
 
 <script src="/vendor/qrcode-generator.js"></script>
@@ -329,6 +350,12 @@
     var url = APP_ORIGIN + '/review.html?business=' + encodeURIComponent(accountId);
     if (itemId) url += '&item=' + encodeURIComponent(itemId);
     return url;
+  }
+
+  // Wait-time code — no item param, ever. One shared code for the whole
+  // business (see this file's own header + app/wait.html's header for why).
+  function waitUrl(accountId) {
+    return APP_ORIGIN + '/wait.html?business=' + encodeURIComponent(accountId);
   }
 
   function makeStickerCard(name, metaText, url, orphaned) {
@@ -390,6 +417,13 @@
     renderQrToCanvas($('general-qr-canvas'), generalUrl);
     $('general-url').textContent = generalUrl;
     $('general-section').hidden = false;
+
+    // Wait-time code — same "only needs the account id" independence as
+    // the general/door code above.
+    var waitCodeUrl = waitUrl(data.accountId);
+    renderQrToCanvas($('wait-qr-canvas'), waitCodeUrl);
+    $('wait-url').textContent = waitCodeUrl;
+    $('wait-section').hidden = false;
 
     if (items.length === 0) {
       $('empty-card').hidden = false;

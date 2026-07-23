@@ -37,6 +37,18 @@ const { getSessionFromRequest } = require('./_session');
 // that remain, so this is visible at runtime to whoever is looking at the
 // API, not only to whoever reads this file.
 //
+// THIRD OUTCOME VARIABLE, ADDED (see the request handler's data-fetch
+// section): waitMinutes — real, customer-tapped wait time between "I just
+// sat down" and "my food arrived" (api/wait-start.js + api/wait-finish.js,
+// customer-facing surface at app/wait.html). Reshaped from real
+// waitlog:<accountId>:<date> aggregates the same way customers/sales are
+// reshaped from logentry:<accountId>:<date> — see summarizeWindow()/
+// computeBaseline()'s waitByDate handling and the outcomeMove array's
+// conditional third push. Sits alongside customers/sales in the confidence-
+// gate pipeline, never folded into environmentItems (that shape is
+// text/comment-based; this is a numeric daily average, same shape as
+// customers/sales).
+//
 // WHAT THIS DOES NOT DO YET (honest, not hidden):
 //   - core-products/<name>.json and environment-items/<slug>.json are
 //     GitHub-repo-per-business concepts from PRODUCT-CONTEXT.md that don't
@@ -305,12 +317,23 @@ async function loadQrSignalsFromComments(accountId, trailingDates, profile) {
   return { environmentItems, coreProductQrSignal };
 }
 
-function summarizeWindow(dates, entryByDate) {
+function summarizeWindow(dates, entryByDate, waitByDate) {
   const entries = dates.map((d) => entryByDate.get(d)).filter(Boolean);
+  // Wait-time days are tracked separately from customers/sales log days — a
+  // day with no waitlog:<accountId>:<date> entry is "no wait data that day,"
+  // never silently treated as zero minutes (same convention as
+  // computeBaseline()'s identical wait-time handling below).
+  const waitDays = (waitByDate ? dates.map((d) => waitByDate.get(d)) : []).filter(Boolean);
+  const waitDailyAverages = waitDays.filter((w) => w.count > 0).map((w) => w.totalMinutes / w.count);
   return {
     entryCount: entries.length,
     avgCustomers: mean(entries.map((e) => e.customers)),
     avgSales: mean(entries.map((e) => e.sales)),
+    waitEntryCount: waitDailyAverages.length,
+    // null (not 0) whenever this window has zero real days of wait-time
+    // data — a business with no taps yet must never get a phantom/broken
+    // metric surfaced.
+    avgWaitMinutes: waitDailyAverages.length > 0 ? mean(waitDailyAverages) : null,
   };
 }
 
@@ -318,10 +341,18 @@ function summarizeWindow(dates, entryByDate) {
 // real logged data — these are INPUTS the model reasons over (per the
 // prompt's own "BASELINE / NOISE FLOOR" section), not something the model
 // is asked to estimate itself.
-function computeBaseline(trailingDates, entryByDate) {
+function computeBaseline(trailingDates, entryByDate, waitByDate) {
   const logged = trailingDates.filter((d) => entryByDate.has(d));
   const entries = logged.map((d) => entryByDate.get(d));
   const dayOfWeekCoverage = Array.from(new Set(logged.map(weekdayOf)));
+
+  // Same "missing day is no-data, never zero" rule as summarizeWindow()
+  // above — only days that actually have a waitlog:<accountId>:<date>
+  // record (and a non-zero ticket count that day) contribute to the
+  // wait-time baseline.
+  const waitLoggedDays = (waitByDate ? trailingDates.map((d) => waitByDate.get(d)) : []).filter(Boolean);
+  const waitDailyAverages = waitLoggedDays.filter((w) => w.count > 0).map((w) => w.totalMinutes / w.count);
+
   return {
     stage: dayOfWeekCoverage.length >= 7 ? 'full' : 'provisional',
     daysLogged: logged.length,
@@ -330,6 +361,12 @@ function computeBaseline(trailingDates, entryByDate) {
     avgSales: mean(entries.map((e) => e.sales)),
     stdevCustomers: stdev(entries.map((e) => e.customers)),
     stdevSales: stdev(entries.map((e) => e.sales)),
+    // Both null (not 0) whenever this business has zero real days of
+    // wait-time data yet — a business with no taps yet must never get a
+    // phantom/broken metric surfaced (see the wait-time build's own
+    // resolved design).
+    avgWaitMinutes: waitDailyAverages.length > 0 ? mean(waitDailyAverages) : null,
+    stdevWaitMinutes: waitDailyAverages.length > 0 ? stdev(waitDailyAverages) : null,
   };
 }
 
@@ -590,16 +627,25 @@ and is the real, trustworthy one):
 ${baselineData}
   Example shape: { "stage": "provisional" | "full", "daysLogged": number,
   "dayOfWeekCoverage": ["Monday","Tuesday",...], "avgCustomers": number, "avgSales": number,
-  "stdevCustomers": number, "stdevSales": number }
+  "stdevCustomers": number, "stdevSales": number, "avgWaitMinutes": number | null,
+  "stdevWaitMinutes": number | null }
+  avgWaitMinutes/stdevWaitMinutes are a separate, optional data source — real, customer-tapped
+  wait time between "I just sat down" and "my food arrived," never the owner's own daily log.
+  They are null whenever this business has zero real wait-time taps yet; never treat null as 0.
   Hard rule: if stage is "provisional", cap your confidence tier at MEDIUM regardless of how
   clean the rest of the picture looks — the baseline itself hasn't earned trust yet, and saying
   otherwise would be exactly the fake precision rule 0 forbids.
 
 OUTCOME MOVE(S) TO EXPLAIN — the specific metric change you were called to account for:
 ${outcomeMove}
-  Example shape: { "metric": "customers" | "sales", "thisWeekAvg": number,
+  Example shape: { "metric": "customers" | "sales" | "waitMinutes", "thisWeekAvg": number,
   "lastWeekAvg": number, "pctChange": number, "direction": "up" | "down" }
-  You may be given one metric or both. Evaluate each independently per step 6.
+  You may be given one, two, or all three metrics. waitMinutes — real, customer-tapped wait time
+  between "I just sat down" and "my food arrived" (a separate mechanic from the QR/environment
+  comment system, sourced from the customer's own two taps, never from timing or instructing
+  staff) — only appears here when this business has real wait-time data covering both comparison
+  weeks; treat it exactly like customers/sales for the noise-floor gate and attribution steps
+  below, never blended into either of the other two. Evaluate each independently per step 6.
 
 CORE-PRODUCT SUB-BLOCK SIGNAL — aggregated QR self-report on the core product itself, trailing
 window:
@@ -902,7 +948,11 @@ const NOISE_FLOOR_STDEV_MULTIPLIER = 1;
 
 function moveClearsNoiseFloor(outcomeMoveList, baseline) {
   return outcomeMoveList.some((move) => {
-    const stdev = move.metric === 'sales' ? baseline.stdevSales : baseline.stdevCustomers;
+    const stdev = move.metric === 'sales'
+      ? baseline.stdevSales
+      : move.metric === 'waitMinutes'
+        ? baseline.stdevWaitMinutes
+        : baseline.stdevCustomers;
     // No computable spread (fewer than 2 logged days, or genuinely zero
     // variance so far) means there is no real floor to clear against yet —
     // treated conservatively as "doesn't clear," per step 2's own "or if
@@ -1069,9 +1119,21 @@ module.exports = async function handler(req, res) {
       if (entries[i]) entryByDate.set(d, entries[i]);
     });
 
-    const thisWeek = summarizeWindow(thisWeekDates, entryByDate);
-    const lastWeek = summarizeWindow(lastWeekDates, entryByDate);
-    const baselineData = computeBaseline(trailingDates, entryByDate);
+    // Wait-time aggregates (api/wait-finish.js) have no logdates-style zset
+    // index — real scale here is a handful of ticket closes per day per
+    // business, so fetching waitlog:<accountId>:<date> directly across the
+    // same trailingDates window (at most TRAILING_WINDOW_DAYS keys) mirrors
+    // the entryByDate fetch-and-map pattern above without needing an index
+    // to filter through first.
+    const waitLogEntries = await Promise.all(trailingDates.map((d) => kv.get(`waitlog:${accountId}:${d}`)));
+    const waitByDate = new Map();
+    trailingDates.forEach((d, i) => {
+      if (waitLogEntries[i]) waitByDate.set(d, waitLogEntries[i]);
+    });
+
+    const thisWeek = summarizeWindow(thisWeekDates, entryByDate, waitByDate);
+    const lastWeek = summarizeWindow(lastWeekDates, entryByDate, waitByDate);
+    const baselineData = computeBaseline(trailingDates, entryByDate, waitByDate);
 
     // Same basic "is there enough data at all" gate log-summary.js already
     // applies, run here too so an obviously-too-early call never spends an
@@ -1118,6 +1180,21 @@ module.exports = async function handler(req, res) {
         direction: thisWeek.avgSales >= lastWeek.avgSales ? 'up' : 'down',
       },
     ];
+
+    // Third outcome variable, pushed only when BOTH comparison windows have
+    // at least one real day of wait-time data — a business with zero taps
+    // yet must never get a phantom/broken metric surfaced (this is the same
+    // "no data that day" honesty rule summarizeWindow()/computeBaseline()
+    // already apply above, just gating whether this entry exists at all).
+    if (thisWeek.avgWaitMinutes !== null && lastWeek.avgWaitMinutes !== null) {
+      outcomeMove.push({
+        metric: 'waitMinutes',
+        thisWeekAvg: thisWeek.avgWaitMinutes,
+        lastWeekAvg: lastWeek.avgWaitMinutes,
+        pctChange: lastWeek.avgWaitMinutes === 0 ? null : ((thisWeek.avgWaitMinutes - lastWeek.avgWaitMinutes) / lastWeek.avgWaitMinutes) * 100,
+        direction: thisWeek.avgWaitMinutes >= lastWeek.avgWaitMinutes ? 'up' : 'down',
+      });
+    }
 
     // Still a real, honest, unbuilt gap — named explicitly rather than
     // invented. See file header for the full explanation. Distinct from the
