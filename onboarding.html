@@ -437,6 +437,7 @@
       <button type="button" id="sticker-scan-open">Scan with camera</button>
       <div class="sticker-scanner" id="sticker-scanner" hidden>
         <video id="sticker-scanner-video" autoplay playsinline muted></video>
+        <canvas id="sticker-scanner-canvas" hidden></canvas>
         <p class="soft" id="sticker-scanner-status">Point your camera at the sticker's QR code.</p>
         <button type="button" class="tertiary-link" id="sticker-scanner-close">Cancel</button>
       </div>
@@ -583,6 +584,7 @@
   </section>
 </main>
 
+<script src="vendor/jsQR.js"></script>
 <script>
   // Real Stripe Payment Links, one per tier — the "save money" vs. "get the
   // most out of it" fork on screen-setup opens the matching one. Both are
@@ -1575,12 +1577,14 @@
   }
 
   // ---------- Real, in-app camera QR scanner ----------
-  // BarcodeDetector is a native browser API (Chrome/Android broadly,
-  // Safari 17+/iOS 17+) — no external library, no build step, matching
-  // this codebase's own no-added-dependency convention. Feature-detected;
-  // falls back to the manual number entry above (already the only path
-  // before this) with an honest message when unsupported, rather than
-  // showing a scan button that silently does nothing.
+  // CORRECTED 2026-07-23 — the first version of this used the Shape
+  // Detection API's BarcodeDetector, which turned out to not exist on
+  // iOS/WebKit at all (confirmed live: a real iPhone, installed as a
+  // home-screen app, showed no camera opening whatsoever — the feature
+  // check silently took the unsupported-API branch every time). Rebuilt on
+  // vendor/jsQR.js instead — a pure-JS decoder that reads pixel data via
+  // <canvas> getImageData() and needs no native browser API, so it works
+  // identically on iOS Safari/WKWebView, Android Chrome, and desktop.
   let stickerScannerStream = null;
   let stickerScannerRAF = null;
 
@@ -1616,22 +1620,17 @@
   }
 
   async function openStickerScanner() {
-    if (!('BarcodeDetector' in window)) {
-      $('sticker-status').textContent = "Live scanning isn't supported in this browser yet — type the number below instead.";
+    if (typeof window.jsQR !== 'function') {
+      // vendor/jsQR.js failed to load (a real network hiccup, not a
+      // platform-support question — jsQR is pure JS with no browser API
+      // dependency, so this branch should be rare, unlike the old
+      // BarcodeDetector check it replaced) — fail honestly, not silently.
+      $('sticker-status').textContent = 'The scanner could not load — type the number below instead.';
       return;
     }
     $('sticker-status').textContent = '';
     $('sticker-scanner').hidden = false;
     $('sticker-scanner-status').textContent = "Point your camera at the sticker's QR code.";
-
-    let detector;
-    try {
-      detector = new BarcodeDetector({ formats: ['qr_code'] });
-    } catch (err) {
-      $('sticker-scanner-status').textContent = 'Could not start the scanner on this device — type the number below instead.';
-      stopStickerScanner();
-      return;
-    }
 
     try {
       stickerScannerStream = await navigator.mediaDevices.getUserMedia({
@@ -1644,24 +1643,45 @@
       return;
     }
 
-    $('sticker-scanner-video').srcObject = stickerScannerStream;
+    const video = $('sticker-scanner-video');
+    const canvas = $('sticker-scanner-canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    video.srcObject = stickerScannerStream;
 
-    async function tick() {
+    function tick() {
       if (!stickerScannerStream) return; // scanner was closed mid-loop — stop, don't reschedule
-      try {
-        const codes = await detector.detect($('sticker-scanner-video'));
-        if (codes && codes.length > 0) {
-          const num = extractStickerNumber(codes[0].rawValue);
-          if (num) {
-            stopStickerScanner();
-            setCurrentSticker(num);
-            return;
+      // readyState check: the very first frames after getUserMedia resolves
+      // can arrive before the video actually has decoded pixel data —
+      // drawImage on an empty/zero-size frame is a wasted (harmless, but
+      // pointless) tick, not an error, so just wait for the next one.
+      if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        let imageData;
+        try {
+          imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } catch (err) {
+          imageData = null; // a transient decode error on one frame — never fatal, just skip it
+        }
+        if (imageData) {
+          let code = null;
+          try {
+            code = window.jsQR(imageData.data, imageData.width, imageData.height);
+          } catch (err) {
+            code = null; // jsQR itself never throws on real input, but never let one bad frame kill the loop
+          }
+          if (code && code.data) {
+            const num = extractStickerNumber(code.data);
+            if (num) {
+              stopStickerScanner();
+              setCurrentSticker(num);
+              return;
+            }
+            // Decoded a real QR code, but not one of ours (e.g. a random
+            // poster) — keep scanning rather than treating it as an error.
           }
         }
-      } catch (err) {
-        // A single failed detect() call (a blurry frame, a momentary camera
-        // hiccup) is normal — only a closed stream (checked above) should
-        // ever stop this loop, never one bad frame.
       }
       stickerScannerRAF = requestAnimationFrame(tick);
     }
