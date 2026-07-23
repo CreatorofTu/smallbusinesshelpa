@@ -1392,6 +1392,14 @@
     const core = state.setup.coreProduct || 'your core product';
     $('product-heading').textContent =
       'Time to tell the ai what makes you special — you mentioned ' + core + ' as your core product.';
+    // Placeholder is relevant to what they actually typed earlier ("What
+    // type of waffle?" instead of a generic example list) -- pure
+    // client-side string interpolation off state.setup.coreProduct, no API
+    // call needed. Falls back to the original example-style placeholder if
+    // coreProduct is somehow still empty at this point.
+    $('product-type').placeholder = state.setup.coreProduct
+      ? 'What type of ' + state.setup.coreProduct + '?'
+      : 'Eggo, Belgian, Brioche, Buttermilk?';
     $('product-type').value = state.product.type;
     $('product-toppings').value = state.product.toppings;
     $('product-extras').value = state.product.extras;

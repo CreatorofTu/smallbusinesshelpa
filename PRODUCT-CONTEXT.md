@@ -555,6 +555,10 @@ A third mode, raised in the same session, with the founder's own caveat attached
 
 **Status: concept only, explicitly not built, explicitly not scoped for today's build.**
 
+## Reminder, not yet built: short instructional videos on the pages
+
+Founder's own note, worth keeping visible rather than lost in a chat scrollback: **people love videos, even a 3-second one** — add short instructional clips to the app's pages (onboarding steps, the walk-around/sticker process, wherever a screen currently only explains itself in text). Not scoped to one specific page or moment yet — a real production idea, not decided in detail (which pages, how the video gets hosted/recorded, whether it's the founder's own voice/face or something more produced). Flagged here so it doesn't get silently dropped; revisit when there's room to actually plan it rather than bolt it on.
+
 ## Working style notes for this project specifically
 
 - The founder wants overpromising copy flagged every single time it appears, even after it's been flagged before for near-identical phrasing — this is a standing instruction, not a one-off correction. Anything implying the product *takes action* (reverts a change, wins back or retains customers) needs a flag unless it's already gated behind the explicit, designed consent mechanic above.
