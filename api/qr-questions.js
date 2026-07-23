@@ -155,10 +155,10 @@ function fallbackItemQuestions(itemLabel) {
 function buildCoreProductQuestions(coreProduct) {
   const label = coreProduct || 'your order';
   return [
-    { key: 'had', type: 'boolean', prompt: `Did you have a ${label}?` },
-    { key: 'pricePaid', type: 'number', prompt: `How much did you pay for that ${label}?`, optional: true },
-    { key: 'gotOn', type: 'text', prompt: `What all did you get on that ${label}?`, optional: true },
-    { key: 'sameAsLastTime', type: 'enum', options: ['yes', 'no', 'unsure'], prompt: `Was the ${label} the same as you had it last time? Does it taste different?` },
+    { key: 'had', type: 'boolean', prompt: `Did you get ${label} today?` },
+    { key: 'pricePaid', type: 'number', prompt: `How much did you pay for it?`, optional: true },
+    { key: 'gotOn', type: 'text', prompt: `What all did you get on it?`, optional: true },
+    { key: 'sameAsLastTime', type: 'enum', options: ['yes', 'no', 'unsure'], prompt: `Was it the same as you had it last time? Does it taste different?` },
   ];
 }
 

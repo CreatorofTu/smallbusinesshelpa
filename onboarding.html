@@ -144,7 +144,7 @@
     background: none; border: none; color: var(--ink-soft); text-decoration: underline;
     font-family: var(--font); font-size: .85rem; cursor: pointer; padding: .3em .2em;
     align-self: flex-start;
-    min-height: 44px; display: inline-flex; align-items: center; /* full-size tap target for the way back */
+    min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; /* full-size tap target for the way back */
   }
   .tertiary-link:hover { color: var(--ink); }
   .tertiary-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
@@ -366,7 +366,7 @@
         <label>4. Any other significant items that could've been here? Matcha tea? (Optional)
           <input type="text" id="product-extras">
         </label>
-        <label>5. The most important part (this stays between you and the ai, NEVER US — it's saved locally to your account, and we will never ever share this): define the recipe, ingredients only right now. We assume you have best food practices, so we won't ask anything else past that.
+        <label>5. The most important part (this stays between you and the ai, NEVER US — it's saved on this device/browser only, not to your account, and we will never ever share this): define the recipe, ingredients only right now. We assume you have best food practices, so we won't ask anything else past that.
           <textarea id="product-recipe" placeholder="One ingredient per line" required></textarea>
         </label>
         <button type="submit">Continue</button>
@@ -435,9 +435,6 @@
   // "stays between you and the ai, NEVER US" — this exclusion is what
   // keeps that promise true. Never add the recipe to any server payload.
   // ============================================================
-  function accountId() {
-    return state.account ? state.account.id : null;
-  }
 
   const API = {
     async post(path, body) {
@@ -464,13 +461,12 @@
       });
     },
     recordPayment(mode) {
-      // No real payment/billing endpoint exists yet (out of scope for the
-      // account-scoping build) — kept as the same best-effort stub it
-      // always was. accountId() is still passed here since /api/onboarding-
-      // payment doesn't exist yet and so was never touched by the session
-      // migration — whenever it's built, it should authenticate the same way
-      // every other real endpoint now does (session cookie, not this field).
-      return this.post('/api/onboarding-payment', { accountId: accountId(), amount: 10, mode: mode });
+      // Folded into /api/save-profile.js (session-cookie authenticated, same
+      // as every other call here) — /api/onboarding-payment never existed as
+      // a real file, so this always 404'd silently. amount is fixed
+      // server-side to the real $20 price; the server never trusts a
+      // client-supplied amount.
+      return this.post('/api/save-profile', { payment: { mode: mode } });
     },
     submitInventory() {
       return this.post('/api/save-profile', { inventory: state.inventory });

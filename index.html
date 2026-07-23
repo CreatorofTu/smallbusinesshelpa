@@ -173,6 +173,7 @@
     background: none; border: none; color: var(--ink-soft); text-decoration: underline;
     font-family: var(--font); font-size: .85rem; cursor: pointer; padding: .3em 0;
     align-self: flex-start;
+    min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center;
   }
   .tertiary-link:hover { color: var(--ink); }
   .tertiary-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
@@ -306,6 +307,7 @@
     <div class="summary-block" id="read-block" hidden>
       <p class="summary-label">Today's read</p>
       <p class="directive-text" id="read-text"></p>
+      <p class="soft" id="read-caveat" hidden></p>
     </div>
 
     <button class="tertiary-link" id="goal-btn" type="button">Goal mode</button>
@@ -348,6 +350,11 @@
   <div class="card" id="unsupported-card" hidden>
     <p class="soft">Push alerts aren't available in this browser yet. Try opening this link in Safari on iPhone, or Chrome on Android.</p>
   </div>
+
+  <div class="card" id="generic-install-card" hidden>
+    <strong>Add this to your home screen</strong>
+    <p class="soft">Add this to your home screen to open your dashboard — tap your browser's menu and choose "Add to Home Screen" or "Install app."</p>
+  </div>
 </main>
 
 <script>
@@ -376,6 +383,7 @@
     readStatus: document.getElementById('read-status'),
     readBlock: document.getElementById('read-block'),
     readText: document.getElementById('read-text'),
+    readCaveat: document.getElementById('read-caveat'),
     goalBtn: document.getElementById('goal-btn'),
     goalStatus: document.getElementById('goal-status'),
     goalSetCard: document.getElementById('goal-set-card'),
@@ -391,6 +399,7 @@
     testStatus: document.getElementById('test-status'),
     deniedCard: document.getElementById('denied-card'),
     unsupportedCard: document.getElementById('unsupported-card'),
+    genericInstallCard: document.getElementById('generic-install-card'),
   };
 
   function isIOS() {
@@ -565,8 +574,20 @@
     const needsOnboarding = granted && !hasCompletedOnboarding();
     const showLog = granted && hasCompletedOnboarding();
 
-    els.iosCard.hidden = !(isIOS() && !standalone);
-    els.chromeInstallCard.hidden = !(!isIOS() && !standalone && !!deferredInstallPrompt);
+    const showIos = isIOS() && !standalone;
+    const showChromeInstall = !isIOS() && !standalone && !!deferredInstallPrompt;
+    // Fallback for every other "not installed yet" case the two cards above
+    // don't cover — any non-Chromium/WebView browser, or an Android browser
+    // that hasn't (yet, or ever again — Chrome throttles this) fired
+    // beforeinstallprompt. Without this, an owner in exactly that state was
+    // silently left on the bare marketing hero with no next step (real,
+    // confirmed 2026-07-23 launch-readiness finding) even though their
+    // account and onboarding data were already intact.
+    const showGenericInstall = !standalone && !showIos && !showChromeInstall;
+
+    els.iosCard.hidden = !showIos;
+    els.chromeInstallCard.hidden = !showChromeInstall;
+    els.genericInstallCard.hidden = !showGenericInstall;
     els.enableCard.hidden = !(standalone && permission === 'default');
     els.deniedCard.hidden = !(standalone && permission === 'denied');
     els.logCard.hidden = !showLog;
@@ -685,6 +706,7 @@
     els.readBtn.disabled = true;
     els.readStatus.textContent = 'Reading…';
     els.readBlock.hidden = true;
+    els.readCaveat.hidden = true;
     try {
       // AUTHORIZATION NOTE: same as every other account-scoped call on this
       // page — the server derives the account from the signed session
@@ -712,6 +734,16 @@
       els.readStatus.textContent = '';
       els.readBlock.hidden = false;
       els.readText.textContent = data.directive || data.diagnosticOnlyLead || data.message || "Keep logging — nothing here has cleared what's normal for your business yet.";
+      // Honest, calm disclosure of the real (universal, today) confound gap
+      // the API's own dataGaps field names — see generate-directive.js's file
+      // header (variableDiffLog + coreProducts[].recipe are never tracked
+      // server-side yet). Never surfaced before this, so a directive read as
+      // flat fact with no caveat. Same plain, non-alarming tone as the rest
+      // of this page — no red styling, just a second quiet line.
+      if (data.dataGaps) {
+        els.readCaveat.hidden = false;
+        els.readCaveat.textContent = "This read is based on what customers told us and your sales numbers — we're not tracking recipe or price changes yet.";
+      }
     } catch (err) {
       els.readStatus.textContent = 'Something went wrong: ' + err.message;
     } finally {

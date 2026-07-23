@@ -97,7 +97,16 @@ module.exports = async function handler(req, res) {
       await webpush.sendNotification(subscription, payload);
       res.status(200).json({ ok: true });
     } catch (err) {
-      res.status(err.statusCode || 500).json({ ok: false, error: err.message });
+      // Never leak err.message to the client — same generic-error convention
+      // as log-entry.js / submit-review.js / wait-start.js / wait-finish.js /
+      // generate-directive.js / save-profile.js. This endpoint is public and
+      // unauthenticated (see note above), so any caller could otherwise read
+      // back whatever text web-push or the push service returns. The HTTP
+      // status class is still meaningful to the caller (a 4xx from web-push,
+      // e.g. an expired/invalid subscription, is a different situation than a
+      // 5xx), so that's preserved — only the message text is genericized.
+      const status = err.statusCode >= 400 && err.statusCode < 500 ? err.statusCode : 500;
+      res.status(status).json({ ok: false, error: 'Could not send that push notification.' });
     }
   } catch (err) {
     res.status(500).json({ error: 'Something went wrong.' });
