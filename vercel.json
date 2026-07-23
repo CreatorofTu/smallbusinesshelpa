@@ -1,4 +1,7 @@
 {
+  "crons": [
+    { "path": "/api/cron-package-reminder", "schedule": "0 * * * *" }
+  ],
   "headers": [
     {
       "source": "/sw.js",

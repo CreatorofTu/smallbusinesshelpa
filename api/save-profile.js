@@ -236,6 +236,15 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    // packageReceived — set once, from onboarding.html's "I've received my
+    // package" CTA on the standalone package screen. Server-assigned
+    // timestamp (never trust a client one), and this also short-circuits
+    // cron-package-reminder.js's 24h reminder push, so someone who confirms
+    // early never gets a stale "did your package arrive" nudge afterward.
+    if (body.packageReceived === true && !profile.packageReceivedAt) {
+      profile.packageReceivedAt = new Date().toISOString();
+    }
+
     if (body.completed === true) {
       profile.completed = true;
       profile.completedAt = new Date().toISOString();

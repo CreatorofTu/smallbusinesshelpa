@@ -124,6 +124,12 @@
 
   form { display: flex; flex-direction: column; gap: .85rem; }
   label, .field-label { display: flex; flex-direction: column; gap: .35rem; font-size: .85rem; color: var(--ink-soft); }
+  .ob-checkbox-row {
+    flex-direction: row; align-items: center; gap: .6rem;
+    font-size: .9rem; color: var(--ink); cursor: pointer;
+    min-height: 44px; /* full tap target, same convention as this app's other controls */
+  }
+  .ob-checkbox-row input[type="checkbox"] { width: 20px; height: 20px; flex: none; margin: 0; }
   input, textarea {
     font-size: 16px;
     padding: .55em .65em;
@@ -279,7 +285,7 @@
     </div>
   </section>
 
-  <!-- ============ Screen 2a: Package on the way + manual preview ============ -->
+  <!-- ============ Screen 2a: Package on the way (standalone) ============ -->
   <section class="screen" id="screen-package" hidden>
     <div class="card">
       <div class="ob-progress">Step 2 of 3</div>
@@ -289,15 +295,26 @@
         <li>100 ai stickers</li>
         <li>Instructions on how to integrate ai into your restaurant/cafe</li>
       </ul>
-      <label>Delivery address (change it here if the package should go somewhere else — optional)
+      <label class="ob-checkbox-row">
+        <input type="checkbox" id="package-ship-elsewhere">
+        Send my kit somewhere other than my business address
+      </label>
+      <label id="package-address-row" hidden>Delivery address
         <input type="text" id="package-address" autocomplete="street-address">
       </label>
       <div class="status" id="package-status"></div>
+      <p class="soft">If you turn on notifications, we'll remind you around when it's due — no need to keep checking.</p>
       <p class="soft">Coming soon: hear this feedback back instead of reading it — in your own voice.</p>
+      <button type="button" id="package-received-cta">I've received my package</button>
+      <button type="button" class="tertiary-link" id="package-back">Back</button>
     </div>
+  </section>
 
+  <!-- ============ Screen 2a-2: Setup instruction manual (standalone) ============ -->
+  <section class="screen" id="screen-manual" hidden>
     <div class="card">
-      <h2>Set up instruction manual</h2>
+      <div class="ob-progress">Step 2 of 3</div>
+      <h1>Set up instruction manual</h1>
       <p>Now for the fun part — it's time to add ai into your business.</p>
       <ol class="manual-list">
         <li>You or an employee needs to walk around your business and write down everything. Yes, everything. (E.g. doors, bathrooms, tables, speakers, spotlights, fireplaces, coat racks — literally everything.) It's essential for you to get the most out of our ai.</li>
@@ -307,7 +324,7 @@
       </ol>
       <p class="soft">Tip: every sticker has its number printed on it — typing the number in this app works just as well as scanning.</p>
       <button type="button" id="package-continue">Start the walk-around list</button>
-      <button type="button" class="tertiary-link" id="package-back">Back</button>
+      <button type="button" class="tertiary-link" id="manual-back">Back</button>
     </div>
   </section>
 
@@ -467,6 +484,9 @@
       // server-side to the real $20 price; the server never trusts a
       // client-supplied amount.
       return this.post('/api/save-profile', { payment: { mode: mode } });
+    },
+    recordPackageReceived() {
+      return this.post('/api/save-profile', { packageReceived: true });
     },
     submitInventory() {
       return this.post('/api/save-profile', { inventory: state.inventory });
@@ -709,11 +729,11 @@
 
   const $ = function (id) { return document.getElementById(id); };
 
-  const SCREENS = ['intro', 'auth', 'setup', 'package', 'inventory', 'stickers', 'product', 'schedule', 'done'];
+  const SCREENS = ['intro', 'auth', 'setup', 'package', 'manual', 'inventory', 'stickers', 'product', 'schedule', 'done'];
   // Everything from Step 1 onward requires an account. A direct deep link
   // (or any other way of landing on one of these screens without having
   // gone through auth) gets bounced back to screen-auth — see render().
-  const POST_AUTH_SCREENS = ['setup', 'package', 'inventory', 'stickers', 'product', 'schedule', 'done'];
+  const POST_AUTH_SCREENS = ['setup', 'package', 'manual', 'inventory', 'stickers', 'product', 'schedule', 'done'];
 
   function go(screen) {
     state.screen = screen;
@@ -902,13 +922,41 @@
   }
 
   // ---------- Screen 2a: package ----------
+  // Default is always "ship to the business address already entered on the
+  // setup screen" — the checkbox is the only way to diverge from that, so
+  // the common case (same address) needs zero input from the owner at all.
   function fillPackageScreen() {
-    $('package-address').value = state.deliveryAddress || state.setup.address;
+    const shipsElsewhere = !!state.deliveryAddress && state.deliveryAddress !== state.setup.address;
+    $('package-ship-elsewhere').checked = shipsElsewhere;
+    $('package-address-row').hidden = !shipsElsewhere;
+    $('package-address').value = shipsElsewhere ? state.deliveryAddress : '';
+  }
+  function handlePackageShipElsewhereToggle(e) {
+    const checked = e.target.checked;
+    $('package-address-row').hidden = !checked;
+    if (!checked) {
+      state.deliveryAddress = state.setup.address;
+      $('package-address').value = '';
+      $('package-status').textContent = 'Sending to your business address.';
+    } else {
+      $('package-address').focus();
+    }
+    saveState();
   }
   function handlePackageAddressInput(e) {
-    state.deliveryAddress = e.target.value.trim();
+    state.deliveryAddress = e.target.value.trim() || state.setup.address;
     saveState();
     $('package-status').textContent = 'Delivery address saved.';
+  }
+
+  // "I've received my package" — works immediately, whether it's been 5
+  // minutes or 5 days. There's no gate/lock on the next screen; this just
+  // records the real receipt time (so cron-package-reminder.js's 24h push
+  // never fires for someone who already confirmed) and moves them into the
+  // separate instruction-manual screen.
+  function handlePackageReceived() {
+    API.recordPackageReceived();
+    go('manual');
   }
 
   // ---------- Screen 2b: inventory ----------
@@ -1312,9 +1360,13 @@
     $('setup-paid-confirm').addEventListener('click', handlePaidConfirm);
     $('setup-back').addEventListener('click', function () { go('auth'); });
 
+    $('package-ship-elsewhere').addEventListener('change', handlePackageShipElsewhereToggle);
     $('package-address').addEventListener('input', handlePackageAddressInput);
-    $('package-continue').addEventListener('click', function () { go('inventory'); });
+    $('package-received-cta').addEventListener('click', handlePackageReceived);
     $('package-back').addEventListener('click', function () { go('setup'); });
+
+    $('package-continue').addEventListener('click', function () { go('inventory'); });
+    $('manual-back').addEventListener('click', function () { go('package'); });
 
     $('inv-add').addEventListener('click', handleInventoryAdd);
     $('inv-submit').addEventListener('click', handleInventorySubmit);
