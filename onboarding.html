@@ -242,6 +242,12 @@
   .sticker-manual { display: flex; gap: .5rem; align-items: center; }
   .sticker-manual input { width: 6.5em; flex: none; text-align: center; }
 
+  .sticker-scanner { display: flex; flex-direction: column; gap: .6rem; align-items: center; }
+  .sticker-scanner video {
+    width: 100%; max-width: 360px; aspect-ratio: 1 / 1; object-fit: cover;
+    border-radius: 14px; border: 1px solid var(--line); background: #000;
+  }
+
   .day-card {
     border: 1px solid var(--line); border-radius: 10px; padding: .8rem .9rem;
     display: flex; flex-direction: column; gap: .6rem;
@@ -428,6 +434,12 @@
       <p class="soft">Put a sticker on each item, type the sticker's number below, then tap the item's name. (Scanning the sticker's QR code works too.)</p>
       <p class="soft">No stickers yet? They arrive within 24 hours — this screen will be waiting right here when they do.</p>
       <div class="sticker-banner" id="sticker-banner"></div>
+      <button type="button" id="sticker-scan-open">Scan with camera</button>
+      <div class="sticker-scanner" id="sticker-scanner" hidden>
+        <video id="sticker-scanner-video" autoplay playsinline muted></video>
+        <p class="soft" id="sticker-scanner-status">Point your camera at the sticker's QR code.</p>
+        <button type="button" class="tertiary-link" id="sticker-scanner-close">Cancel</button>
+      </div>
       <div class="sticker-manual">
         <input type="number" id="sticker-number" inputmode="numeric" min="1" max="100" placeholder="No.">
         <button type="button" id="sticker-use">Use this sticker</button>
@@ -1562,6 +1574,100 @@
     setCurrentSticker($('sticker-number').value);
   }
 
+  // ---------- Real, in-app camera QR scanner ----------
+  // BarcodeDetector is a native browser API (Chrome/Android broadly,
+  // Safari 17+/iOS 17+) — no external library, no build step, matching
+  // this codebase's own no-added-dependency convention. Feature-detected;
+  // falls back to the manual number entry above (already the only path
+  // before this) with an honest message when unsupported, rather than
+  // showing a scan button that silently does nothing.
+  let stickerScannerStream = null;
+  let stickerScannerRAF = null;
+
+  function stopStickerScanner() {
+    if (stickerScannerRAF) { cancelAnimationFrame(stickerScannerRAF); stickerScannerRAF = null; }
+    if (stickerScannerStream) {
+      stickerScannerStream.getTracks().forEach(function (t) { t.stop(); });
+      stickerScannerStream = null;
+    }
+    if ($('sticker-scanner')) $('sticker-scanner').hidden = true;
+  }
+
+  // A real sticker's QR encodes a full URL (see api/sticker-scan.js /
+  // handleStickerDeepLink below): .../onboarding.html?business=<accountId>
+  // &sticker=<N>. Only the number matters here — this scan happens while
+  // already authenticated as this account, so the business id in the URL
+  // (needed for a cold deep-link arrival with no session yet) is redundant
+  // in-app. Also accepts a bare number in case a sticker is ever printed as
+  // just the digits.
+  function extractStickerNumber(text) {
+    const trimmed = String(text || '').trim();
+    if (/^\d+$/.test(trimmed)) return trimmed;
+    try {
+      const url = new URL(trimmed, location.href);
+      const fromQuery = url.searchParams.get('sticker');
+      if (fromQuery && /^\d+$/.test(fromQuery.trim())) return fromQuery.trim();
+    } catch (err) {
+      // Not a URL — falls through to null below. A QR code with unrelated
+      // content (e.g. someone scans a random poster) should never crash
+      // the scanner, just fail to extract a sticker number.
+    }
+    return null;
+  }
+
+  async function openStickerScanner() {
+    if (!('BarcodeDetector' in window)) {
+      $('sticker-status').textContent = "Live scanning isn't supported in this browser yet — type the number below instead.";
+      return;
+    }
+    $('sticker-status').textContent = '';
+    $('sticker-scanner').hidden = false;
+    $('sticker-scanner-status').textContent = "Point your camera at the sticker's QR code.";
+
+    let detector;
+    try {
+      detector = new BarcodeDetector({ formats: ['qr_code'] });
+    } catch (err) {
+      $('sticker-scanner-status').textContent = 'Could not start the scanner on this device — type the number below instead.';
+      stopStickerScanner();
+      return;
+    }
+
+    try {
+      stickerScannerStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+    } catch (err) {
+      $('sticker-scanner-status').textContent = 'Could not access the camera — check permission and try again, or type the number below.';
+      stopStickerScanner();
+      return;
+    }
+
+    $('sticker-scanner-video').srcObject = stickerScannerStream;
+
+    async function tick() {
+      if (!stickerScannerStream) return; // scanner was closed mid-loop — stop, don't reschedule
+      try {
+        const codes = await detector.detect($('sticker-scanner-video'));
+        if (codes && codes.length > 0) {
+          const num = extractStickerNumber(codes[0].rawValue);
+          if (num) {
+            stopStickerScanner();
+            setCurrentSticker(num);
+            return;
+          }
+        }
+      } catch (err) {
+        // A single failed detect() call (a blurry frame, a momentary camera
+        // hiccup) is normal — only a closed stream (checked above) should
+        // ever stop this loop, never one bad frame.
+      }
+      stickerScannerRAF = requestAnimationFrame(tick);
+    }
+    stickerScannerRAF = requestAnimationFrame(tick);
+  }
+
   // ---------- Screen 3: MAIN product (the actual core) ----------
   function fillProductScreen() {
     const core = state.setup.coreProduct || 'your core product';
@@ -1958,9 +2064,14 @@
     $('sticker-number').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); handleStickerManual(); }
     });
-    $('sticker-continue').addEventListener('click', function () { go('product'); });
-    $('sticker-continue-anyway').addEventListener('click', function () { go('product'); });
+    $('sticker-scan-open').addEventListener('click', openStickerScanner);
+    $('sticker-scanner-close').addEventListener('click', stopStickerScanner);
+    // Camera must never keep running once this screen is left, in either
+    // direction — released on Continue (both variants) and Back alike.
+    $('sticker-continue').addEventListener('click', function () { stopStickerScanner(); go('product'); });
+    $('sticker-continue-anyway').addEventListener('click', function () { stopStickerScanner(); go('product'); });
     $('sticker-back').addEventListener('click', function () {
+      stopStickerScanner();
       state.inventorySubmitted = false;
       saveState();
       go('inventory');
