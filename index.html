@@ -114,6 +114,18 @@
   }
   .card[hidden] { display: none; }
 
+  #read-reveal-overlay {
+    position: fixed; inset: 0; z-index: 100; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 2rem; text-align: center; cursor: pointer;
+  }
+  #read-reveal-text {
+    font-family: var(--font); font-weight: 700; font-size: 1.6rem; line-height: 1.4;
+    color: var(--ink); max-width: 32ch; margin: 0 0 1.5rem;
+    text-wrap: balance;
+  }
+  #read-reveal-hint { margin: 0; }
+
   .steps { display: flex; flex-direction: column; gap: 1.25rem; }
   .steps[hidden] { display: none; }
   .step {
@@ -364,6 +376,18 @@
   </div>
 
   <p class="soft" style="text-align:center; font-size:.8rem;"><a href="/terms.html" target="_blank" rel="noopener">Terms</a> · <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+
+  <!-- Full-screen reveal for arriving via a real push notification
+       (cron-anomaly-push.js links to /index.html?read=1) — a plain white
+       screen with just the real directive sentence in black text, not the
+       dashboard. Reuses the same /api/generate-directive call the "Get
+       today's read" button already makes, which hits the exact
+       directivecache:<accountId>:<today> key the cron already populated —
+       a cache hit, no second billed Anthropic call. -->
+  <div id="read-reveal-overlay" hidden>
+    <p id="read-reveal-text"></p>
+    <p class="soft" id="read-reveal-hint">Tap anywhere to continue</p>
+  </div>
 </main>
 
 <script>
@@ -409,6 +433,8 @@
     deniedCard: document.getElementById('denied-card'),
     unsupportedCard: document.getElementById('unsupported-card'),
     genericInstallCard: document.getElementById('generic-install-card'),
+    readRevealOverlay: document.getElementById('read-reveal-overlay'),
+    readRevealText: document.getElementById('read-reveal-text'),
   };
 
   function isIOS() {
@@ -662,6 +688,7 @@
       if ('serviceWorker' in navigator && Notification.permission === 'granted') {
         subscribeToPush().catch(function () {});
       }
+      maybeShowReadReveal();
     }
   }
 
@@ -729,6 +756,42 @@
       els.enableBtn.disabled = false;
       render();
     }
+  }
+
+  // ---- Push-notification full-screen reveal ----
+  // cron-anomaly-push.js's real directive push links to /index.html?read=1
+  // instead of the plain root. Landing here from a real push should feel
+  // like being handed one honest sentence, not the whole dashboard — a
+  // plain white screen, black text, the directive itself. Reuses the same
+  // /api/generate-directive call "Get today's read" already makes, hitting
+  // the exact directivecache:<accountId>:<today> key the cron already
+  // populated — a cache hit, no second billed Anthropic call.
+  let readRevealShown = false;
+  function maybeShowReadReveal() {
+    if (readRevealShown) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get('read') !== '1') return;
+    readRevealShown = true;
+    try { history.replaceState(null, '', location.pathname); } catch (err) {}
+
+    fetchWithTimeout('/api/generate-directive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ today: localDateString() }),
+    })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data || data.configured === false) return;
+        const text = data.directive || data.diagnosticOnlyLead;
+        // Nothing real to show (cache miss, or the day's read turned out
+        // to be "keep logging" between the push firing and this tap) —
+        // quietly skip rather than reveal an empty or fabricated sentence.
+        if (!text) return;
+        els.readRevealText.textContent = text;
+        els.readRevealOverlay.hidden = false;
+      })
+      .catch(function () {});
   }
 
   async function handleGetRead() {
@@ -948,6 +1011,7 @@
     els.chromeInstallBtn.addEventListener('click', handleChromeInstall);
     els.enableBtn.addEventListener('click', handleEnable);
     els.readBtn.addEventListener('click', handleGetRead);
+    els.readRevealOverlay.addEventListener('click', function () { els.readRevealOverlay.hidden = true; });
     els.goalBtn.addEventListener('click', handleGoalClick);
     els.goalForm.addEventListener('submit', handleGoalFormSubmit);
     els.goalChangeBtn.addEventListener('click', handleGoalChange);

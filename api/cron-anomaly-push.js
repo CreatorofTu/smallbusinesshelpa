@@ -149,7 +149,11 @@ module.exports = async function handler(req, res) {
         const payload = JSON.stringify({
           title: 'Justaddegg',
           body: truncateForPush(bodyText),
-          url: '/',
+          // Deep-links to index.html's full-screen reveal (a plain white
+          // screen with the real directive sentence in black text) instead
+          // of the bare dashboard — landing from a real push should feel
+          // like being handed one honest sentence, not a page to navigate.
+          url: '/index.html?read=1',
         });
 
         try {
