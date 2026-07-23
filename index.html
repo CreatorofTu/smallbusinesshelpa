@@ -264,6 +264,18 @@
   .history-row-values { font-size: .9rem; color: var(--ink-soft); margin: .15rem 0 0; }
   .history-edit-form { margin-top: .6rem; }
 
+  /* Product-economics rows (the Product costs & margins section inside
+     #log-card) — same visual grammar as .history-row above (hairline-
+     separated stacked entries inside an existing block), no new visual
+     system. Same [hidden] note as the history rules: the toggled elements
+     rely on the global [hidden] !important catch-all at the top of this
+     stylesheet. */
+  .econ-row { border-top: 1px solid var(--line); padding: .7rem 0 0; margin-top: .7rem; }
+  .econ-row:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+  .econ-row-label { font-weight: 700; font-size: .92rem; margin: 0; }
+  .econ-row-values { font-size: .9rem; color: var(--ink-soft); margin: .15rem 0 0; }
+  .econ-form { margin-top: .6rem; }
+
   /* Ask-your-AI-manager (confirm-then-delay) — see the section's HTML
      comment. The Stop/Redirect escape hatches are DELIBERATELY identical:
      same element, same class, same size, side by side at equal flex width.
@@ -288,10 +300,15 @@
   </div>
   <div class="status" id="login-status"></div>
 
+  <!-- Hardcoded 2026-07-23, deliberately, per the founder's own direct
+       instruction ("cant be marketing copy, lets just make it 'business ai
+       for eurowafel'") ahead of a real handoff to his father. This page is
+       shared by every visitor, not personalized per business — this is fine
+       while Eurowafel is the only real user, but must become dynamic (or at
+       least reconsidered) the moment a second real business is onboarded,
+       so it never silently shows one business's name to another's owner. -->
   <div class="hero">
-    <p class="hero-eyebrow">small business owners,</p>
-    <h1>Your business made you money yesterday. None today.</h1>
-    <p class="hero-sub">Customers won't tell you before they leave forever.<br>We help you before they leave forever...if you let us.</p>
+    <h1>Business AI for Eurowafel.</h1>
   </div>
 
   <div class="steps" id="ios-install-card" hidden>
@@ -428,6 +445,24 @@
       <p class="directive-text" id="goal-feasibility-text"></p>
       <div id="goal-items"></div>
       <button class="tertiary-link" id="goal-change-btn" type="button">Change goal</button>
+    </div>
+
+    <!-- Product costs & margins — per-product bulk-purchase cost + selling
+         price + computed margin, against the new session-gated
+         /api/product-economics (GET on first open, POST per slot save).
+         The margin math itself is server-side; a row only ever shows a
+         margin once BOTH halves (a logged bulk buy and a selling price)
+         really exist — never fabricated from partial data. Same
+         findability convention as History above: a plain tertiary-link
+         toggle, no nav; rows load on first open only (see
+         loadEconomics()). Toggled containers rely on the global [hidden]
+         !important catch-all at the top of this stylesheet. -->
+    <button class="tertiary-link" id="econ-btn" type="button">Product costs &amp; margins</button>
+    <div class="summary-block" id="econ-block" hidden>
+      <p class="summary-label">Product costs &amp; margins</p>
+      <p class="soft">Log what a bulk buy cost and how many it made — we work out the cost each, and your margin once a selling price is in.</p>
+      <div class="status" id="econ-status"></div>
+      <div id="econ-rows"></div>
     </div>
 
     <!-- Ask your AI manager — the confirm-then-delay consent mechanic
@@ -577,6 +612,10 @@
     goalFeasibilityText: document.getElementById('goal-feasibility-text'),
     goalItems: document.getElementById('goal-items'),
     goalChangeBtn: document.getElementById('goal-change-btn'),
+    econBtn: document.getElementById('econ-btn'),
+    econBlock: document.getElementById('econ-block'),
+    econStatus: document.getElementById('econ-status'),
+    econRows: document.getElementById('econ-rows'),
     taskBtn: document.getElementById('task-btn'),
     taskBlock: document.getElementById('task-block'),
     taskForm: document.getElementById('task-form'),
@@ -1130,15 +1169,20 @@
       // CAUSAL_DATA_GAPS comment. As of 2026-07-23, recipe data IS tracked
       // (encrypted at rest — founder-directed reversal of the old promise,
       // see save-profile.js's header), so this copy no longer names
-      // recipes; the gaps left are price and per-product sales granularity
-      // (daily totals are one combined number, never split by product —
-      // added alongside the three-slot products build the same day), and
-      // this line must stay in sync with CAUSAL_DATA_GAPS whenever that
-      // object changes. Same plain, non-alarming tone as the rest of this
-      // page — no red styling, just a second quiet line.
+      // recipes; and since the product-economics build the same day,
+      // per-product prices count WHEN the owner has entered them (Product
+      // costs & margins section below) — so the price half of this line
+      // now says exactly that instead of "not tracking price changes yet"
+      // (which would undersell) or claiming prices are simply tracked
+      // (which would overclaim: a product the owner never filled in stays
+      // untracked, and no business-wide price tier exists). The
+      // per-product sales granularity gap is unchanged. This line must
+      // stay in sync with CAUSAL_DATA_GAPS whenever that object changes.
+      // Same plain, non-alarming tone as the rest of this page — no red
+      // styling, just a second quiet line.
       if (data.dataGaps) {
         els.readCaveat.hidden = false;
-        els.readCaveat.textContent = "This read is based on what customers told us and your sales numbers — we're not tracking price changes yet, and your daily totals are one combined number, not split by product.";
+        els.readCaveat.textContent = "This read is based on what customers told us and your sales numbers — prices only count once you've entered them under Product costs & margins, and your daily totals are one combined number, not split by product.";
       }
     } catch (err) {
       els.readStatus.textContent = isTimeoutError(err)
@@ -1322,6 +1366,233 @@
         // above — refresh it so the page never shows a stale summary next
         // to freshly corrected numbers.
         loadSummary();
+      } catch (err) {
+        status.textContent = isTimeoutError(err)
+          ? 'Taking longer than expected — try again in a bit.'
+          : 'Something went wrong: ' + err.message;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    return row;
+  }
+
+  // ---- Product costs & margins: per-product economics ----
+  // Read path: GET /api/product-economics (session-gated; slots.main/
+  // secondary/seasonal are null for products this account never onboarded,
+  // so "no products at all" is distinguishable from "product exists, no
+  // numbers yet"). Write path: POST the same endpoint, one slot per save —
+  // amountSpentDollars+unitsYielded as a pair (the server computes cost
+  // per unit itself; nothing client-computed is ever sent) and/or
+  // sellingPriceDollars on its own. Rows are built with createElement/
+  // textContent (same rule as buildHistoryRow — the product label is the
+  // owner's own typed text and must never be interpreted as markup). Same
+  // once-per-load-until-toggled pattern as loadHistory().
+  let econLoaded = false;
+
+  const ECON_SLOT_ORDER = ['main', 'secondary', 'seasonal'];
+  const ECON_SLOT_WORD = { main: 'main product', secondary: 'secondary product', seasonal: 'seasonal product' };
+
+  function handleEconToggle() {
+    const opening = els.econBlock.hidden;
+    els.econBlock.hidden = !opening;
+    if (opening && !econLoaded) loadEconomics();
+  }
+
+  async function loadEconomics() {
+    els.econStatus.textContent = 'Loading…';
+    try {
+      // AUTHORIZATION NOTE: same as every other account-scoped call on this
+      // page — the server derives the account from the signed session
+      // cookie sent automatically with this same-origin request.
+      const res = await fetchWithTimeout('/api/product-economics', { credentials: 'same-origin' });
+      if (res.status === 401) {
+        els.econStatus.textContent = "Your session's expired — log back in to keep logging.";
+        location.href = '/onboarding.html?mode=login';
+        return;
+      }
+      if (!res.ok) {
+        els.econStatus.textContent = "Couldn't load your product numbers right now — try again in a bit.";
+        return;
+      }
+      const data = await res.json();
+      econLoaded = true;
+      els.econStatus.textContent = '';
+      renderEconRows(data && data.slots ? data.slots : {});
+    } catch (err) {
+      els.econStatus.textContent = isTimeoutError(err)
+        ? 'Taking longer than expected — try again in a bit.'
+        : 'Something went wrong: ' + err.message;
+    }
+  }
+
+  function formatDollars(n) {
+    // Negative margins are real and shown plainly (a product selling below
+    // its ingredient cost is exactly what this section exists to reveal) —
+    // just formatted as -$1.50 rather than $-1.50.
+    return n < 0 ? '-$' + Math.abs(n).toFixed(2) : '$' + n.toFixed(2);
+  }
+
+  function econSummaryText(slotData) {
+    const parts = [];
+    if (slotData.costPerUnit !== null && slotData.costPerUnit !== undefined) {
+      parts.push('costs ' + formatDollars(slotData.costPerUnit) + ' each');
+    } else {
+      parts.push('no bulk buy logged yet');
+    }
+    if (slotData.sellingPrice !== null && slotData.sellingPrice !== undefined) {
+      parts.push('sells for ' + formatDollars(slotData.sellingPrice));
+    } else {
+      parts.push('no selling price yet');
+    }
+    // Margin only when the server actually computed one — both halves
+    // exist. Never assembled client-side from partial data.
+    if (slotData.marginDollars !== null && slotData.marginDollars !== undefined) {
+      const pct = Math.round(slotData.marginPercent * 10) / 10;
+      parts.push('margin ' + formatDollars(slotData.marginDollars) + ' (' + pct + '%)');
+    }
+    return parts.join(' · ');
+  }
+
+  function renderEconRows(slots) {
+    els.econRows.innerHTML = '';
+    const present = ECON_SLOT_ORDER.filter(function (s) { return !!(slots && slots[s]); });
+    if (present.length === 0) {
+      // No products on this account at all — plain pointer at onboarding
+      // instead of a broken empty state.
+      const empty = document.createElement('p');
+      empty.className = 'soft';
+      empty.textContent = 'No products on this account yet — finish onboarding first, then they show up here.';
+      els.econRows.appendChild(empty);
+      return;
+    }
+    present.forEach(function (s) {
+      els.econRows.appendChild(buildEconRow(s, slots[s]));
+    });
+  }
+
+  function buildEconRow(slotKey, slotData) {
+    const row = document.createElement('div');
+    row.className = 'econ-row';
+
+    const labelEl = document.createElement('p');
+    labelEl.className = 'econ-row-label';
+    labelEl.textContent = slotData.label + ' — ' + (ECON_SLOT_WORD[slotKey] || slotKey);
+    row.appendChild(labelEl);
+
+    const values = document.createElement('p');
+    values.className = 'econ-row-values';
+    values.textContent = econSummaryText(slotData);
+    row.appendChild(values);
+
+    // Same three-input shape the endpoint accepts: a bulk-buy pair plus an
+    // optional selling price. None marked required — each half is optional
+    // independently — so the pairing rule is enforced in the submit
+    // handler below (and again server-side) instead of via input attrs.
+    function labeled(text, input) {
+      const label = document.createElement('label');
+      label.appendChild(document.createTextNode(text));
+      label.appendChild(input);
+      return label;
+    }
+    const form = document.createElement('form');
+    form.className = 'econ-form';
+    const fieldRow = document.createElement('div');
+    fieldRow.className = 'field-row';
+    const amountInput = document.createElement('input');
+    amountInput.type = 'number';
+    amountInput.inputMode = 'decimal';
+    amountInput.min = '0.01';
+    amountInput.max = '5000';
+    amountInput.step = '0.01';
+    amountInput.placeholder = 'e.g. 100';
+    const unitsInput = document.createElement('input');
+    unitsInput.type = 'number';
+    unitsInput.inputMode = 'numeric';
+    unitsInput.min = '1';
+    unitsInput.max = '100000';
+    unitsInput.step = '1';
+    unitsInput.placeholder = 'e.g. 200';
+    fieldRow.appendChild(labeled('Bulk buy: spent ($)', amountInput));
+    fieldRow.appendChild(labeled('Units it made', unitsInput));
+    form.appendChild(fieldRow);
+    const priceInput = document.createElement('input');
+    priceInput.type = 'number';
+    priceInput.inputMode = 'decimal';
+    priceInput.min = '0.01';
+    priceInput.max = '500';
+    priceInput.step = '0.01';
+    priceInput.placeholder = 'e.g. 4.00';
+    form.appendChild(labeled('Sells for ($ each)', priceInput));
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'submit';
+    saveBtn.textContent = 'Save';
+    form.appendChild(saveBtn);
+    row.appendChild(form);
+
+    const status = document.createElement('div');
+    status.className = 'status';
+    row.appendChild(status);
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const amountRaw = amountInput.value.trim();
+      const unitsRaw = unitsInput.value.trim();
+      const priceRaw = priceInput.value.trim();
+      // A bulk buy is a pair — half a pair can't compute an honest
+      // cost-per-unit (mirrors the server's own rule, friendlier here).
+      if ((amountRaw && !unitsRaw) || (!amountRaw && unitsRaw)) {
+        status.textContent = 'A bulk buy needs both numbers — what you spent and how many it made.';
+        return;
+      }
+      const body = { slot: slotKey };
+      if (amountRaw && unitsRaw) {
+        body.amountSpentDollars = Number(amountRaw);
+        body.unitsYielded = Number(unitsRaw);
+      }
+      if (priceRaw) {
+        body.sellingPriceDollars = Number(priceRaw);
+      }
+      if (body.amountSpentDollars === undefined && body.sellingPriceDollars === undefined) {
+        status.textContent = 'Enter a bulk buy or a selling price first.';
+        return;
+      }
+      saveBtn.disabled = true;
+      status.textContent = 'Saving…';
+      try {
+        // AUTHORIZATION NOTE: same as every other account-scoped call on
+        // this page — the server derives the account from the signed
+        // session cookie sent automatically with this same-origin request.
+        const res = await fetchWithTimeout('/api/product-economics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        if (res.status === 401) {
+          status.textContent = "Your session's expired — log back in to keep logging.";
+          location.href = '/onboarding.html?mode=login';
+          return;
+        }
+        let data = null;
+        try { data = await res.json(); } catch (err) {}
+        if (!res.ok) {
+          // The server's own error copy is already written for the owner —
+          // show it as-is when present (same convention as handleTaskSubmit).
+          status.textContent = (data && data.error) || 'Could not save that — check the numbers and try again.';
+          return;
+        }
+        // The response carries the freshly-computed slot (including the
+        // margin, once both halves exist) — update the row in place, no
+        // second round trip.
+        if (data && data.slot) {
+          values.textContent = econSummaryText(data.slot);
+        }
+        amountInput.value = '';
+        unitsInput.value = '';
+        priceInput.value = '';
+        status.textContent = 'Saved.';
       } catch (err) {
         status.textContent = isTimeoutError(err)
           ? 'Taking longer than expected — try again in a bit.'
@@ -1718,6 +1989,7 @@
     els.loginBtn.addEventListener('click', handleLoginClick);
     els.qrStickersBtn.addEventListener('click', function () { location.href = '/qr-stickers.html'; });
     els.historyBtn.addEventListener('click', handleHistoryToggle);
+    els.econBtn.addEventListener('click', handleEconToggle);
     els.chromeInstallBtn.addEventListener('click', handleChromeInstall);
     els.enableBtn.addEventListener('click', handleEnable);
     els.readBtn.addEventListener('click', handleGetRead);

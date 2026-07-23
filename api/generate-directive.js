@@ -41,9 +41,13 @@ const { decryptRecipeText } = require('./_recipe-crypto');
 // model's verdict, never from ctx/coreProducts). Recipe changelog records
 // carry an encrypted line-diff, decrypted the same in-memory-only way in
 // loadVariableDiffLog(). The gaps still left — named honestly at runtime
-// via CAUSAL_DATA_GAPS/`dataGaps` below — are price (no price/priceTier
-// field is tracked anywhere in profile:<accountId> yet, see _gap_priceTier
-// in reshapeProfileToRepoShape) and per-product sales granularity (one
+// via CAUSAL_DATA_GAPS/`dataGaps` below — are price (PARTIALLY closed
+// 2026-07-23: per-product sellingPrice/costPerUnit now exist in
+// profile.economics via api/product-economics.js and surface per-slot on
+// coreProducts entries when the owner has entered them, but a slot the
+// owner never filled in stays null and no business-wide priceTier exists —
+// see _gap_priceTier in reshapeProfileToRepoShape) and per-product sales
+// granularity (one
 // combined daily {customers, sales} pair for the whole business — which is
 // why the 2026-07-23 three-slot products build's seasonal handling is
 // interpretive prompt context, never a mathematical baseline adjustment;
@@ -235,6 +239,16 @@ function reshapeProfileToRepoShape(profile) {
         ? { main: profile.product }
         : {};
 
+  // PRODUCT ECONOMICS (2026-07-23) — profile.economics[slot] =
+  // { costPerUnit, sellingPrice, lastBulkPurchase }, written by
+  // api/product-economics.js (see that file's header for the full stored
+  // shape). Read here so each coreProducts entry below can carry the
+  // owner's own real per-product price/cost numbers when they exist.
+  const storedEconomics =
+    profile && profile.economics && typeof profile.economics === 'object' && !Array.isArray(profile.economics)
+      ? profile.economics
+      : {};
+
   // Per-slot reshape. Recipe — REAL since 2026-07-23 (see the file header
   // for the founder's reversal of the old never-server-side promise).
   // Stored encrypted at rest ({ iv, tag, data } via api/_recipe-crypto.js);
@@ -273,6 +287,23 @@ function reshapeProfileToRepoShape(profile) {
       // can never smuggle arbitrary text into the prompt unfenced.
       entry.season = SEASON_VALUES.indexOf(slot.season) !== -1 ? slot.season : null;
     }
+    // Per-product economics (2026-07-23, api/product-economics.js): the
+    // owner's own entered selling price and bulk-purchase-derived
+    // ingredient cost-per-unit. Real numbers when present — this is the
+    // per-product half of the price gap _gap_priceTier names below, now
+    // genuinely closed for slots the owner has filled in — and honest
+    // nulls when never entered (never guessed, never defaulted).
+    // marginPercent only when BOTH halves exist, matching
+    // product-economics.js's own read-side computation exactly. Plain
+    // server-validated numbers, never free text — nothing here needs
+    // fencing (same reasoning as `temp` above). Re-validated here so a
+    // hand-edited KV value can never surface NaN into the prompt.
+    const econ = storedEconomics[role] && typeof storedEconomics[role] === 'object' ? storedEconomics[role] : {};
+    const price = Number.isFinite(econ.sellingPrice) && econ.sellingPrice > 0 ? econ.sellingPrice : null;
+    const costPerUnit = Number.isFinite(econ.costPerUnit) && econ.costPerUnit > 0 ? econ.costPerUnit : null;
+    entry.price = price;
+    entry.costPerUnit = costPerUnit;
+    entry.marginPercent = price !== null && costPerUnit !== null ? ((price - costPerUnit) / price) * 100 : null;
     return entry;
   }
 
@@ -288,11 +319,18 @@ function reshapeProfileToRepoShape(profile) {
     hours: schedule
       ? schedule.map((row) => ({ day: row.day, open: row.open, start: row.start, end: row.end }))
       : null,
-    // GAP, named rather than invented: no `price`/priceTier field exists
-    // anywhere in profile:<accountId> today, though PRODUCT-CONTEXT.md's
-    // business.json spec calls for one.
+    // GAP, named rather than invented — PARTIALLY addressed 2026-07-23,
+    // stated precisely: per-product sellingPrice/costPerUnit now exist
+    // (profile.economics, api/product-economics.js) and are surfaced on
+    // each coreProducts entry below when the owner has entered them. But
+    // this field was modeled as ONE business-wide price tier
+    // (PRODUCT-CONTEXT.md's business.json spec), which is a different
+    // thing from a per-product price — no business-wide tier is tracked
+    // anywhere, and faking one from a single product's price would be
+    // exactly the invented precision this file's conventions forbid, so
+    // priceTier stays an honest null.
     priceTier: null,
-    _gap_priceTier: 'not tracked anywhere in profile:<accountId> yet — business.json spec calls for one, save-profile.js has no field for it',
+    _gap_priceTier: 'business-wide priceTier still not tracked anywhere in profile:<accountId> — per-product sellingPrice/costPerUnit DO exist since 2026-07-23 (profile.economics via api/product-economics.js, surfaced per-slot on coreProducts when entered), but that is a per-product price, not the single business-wide tier business.json\'s spec calls for',
   };
 
   // Up to three entries, main first (it's "the actual core, what the shop
@@ -464,6 +502,17 @@ function changelogCommitMessage(entry) {
     if (entry.field === 'recipe') return `Updated the ${slotMatch[1]} product recipe (ingredient line-diff attached).`;
     if (entry.field === 'season') return 'Changed which season the seasonal product belongs to.';
     return `Updated ${entry.field} on the ${slotMatch[1]} product.`;
+  }
+  // Economics paths (economics.main.sellingPrice etc., written by
+  // api/product-economics.js since 2026-07-23) — named per slot so the
+  // model can tell which product's price/cost moved. A sellingPrice change
+  // is a real, customer-facing price change; a costPerUnit change is the
+  // owner's own supplier-side ingredient cost moving.
+  const econMatch = /^economics\.(main|secondary|seasonal)\./.exec(entry.path);
+  if (econMatch) {
+    if (entry.field === 'sellingPrice') return `Changed the ${econMatch[1]} product's selling price.`;
+    if (entry.field === 'costPerUnit') return `Logged a new bulk-purchase ingredient cost for the ${econMatch[1]} product (cost per unit changed).`;
+    return `Updated ${entry.field} on the ${econMatch[1]} product's economics.`;
   }
   // Pre-3-slot records — the old singular product.* paths stay in the log
   // as written; still read, still named honestly as the (then-only) core
@@ -874,9 +923,20 @@ CORE PRODUCTS (core-products/<name>.json-shaped, one entry per product actually 
 three, each tagged with its role):
 ${coreProductsJson}
   Example shape: [ { "role": "main" | "secondary" | "seasonal", "name": "belgian-waffle",
-  "type": "string", "temp": "Hot" | "Cold", "price": number, "recipe": { "ingredients":
+  "type": "string", "temp": "Hot" | "Cold", "price": number | null, "costPerUnit": number | null,
+  "marginPercent": number | null, "recipe": { "ingredients":
   ["batter","butter","brown sugar","cinnamon","powdered sugar"] }, "toppings": "string",
   "extras": "string", "season": "winter"|"spring"|"summer"|"fall" (seasonal role only) } ]
+  price/costPerUnit/marginPercent are the owner's own entered per-product numbers: the selling
+  price, the ingredient cost-per-unit derived from a bulk purchase the owner logged ("$100 of
+  flour made 200 waffles" -> 0.50), and the margin computed only when both halves exist. null
+  means the owner never entered that number — never estimate or invent a missing one, and never
+  compute a margin yourself from partial data. costPerUnit is ingredient cost only (no labor or
+  overhead is tracked), so any margin reasoning must treat it as an ingredient margin, not
+  all-in profit. A diff-log entry whose path is economics.<role>.sellingPrice is a real price
+  change on that product — a tier-1 core-product change for the priority framework in section 2;
+  an economics.<role>.costPerUnit entry is a supplier/ingredient-cost move, real but not
+  customer-visible on its own.
   Roles: "main" is the actual core — what the shop is known for — and is always present.
   "secondary" (optional) is something usually sold alongside it in the shop (a coffee, a drink,
   a matcha tea); when present it is part of normal baseline reasoning exactly like main — same
@@ -1271,20 +1331,27 @@ const KEEP_LOGGING_MESSAGE = "Keep logging — nothing here has cleared what's n
 // promise (see the file header), recipe data is now stored encrypted and
 // read by this engine for real, so recipe-level causes CAN now be detected
 // and keeping that line would have been a false runtime claim. What's
-// honestly left: price, and (named explicitly since the 2026-07-23
-// three-slot products build) per-product sales granularity. No
-// price/priceTier field is tracked anywhere in profile:<accountId> (see
-// _gap_priceTier in reshapeProfileToRepoShape), so price-level causes
-// still cannot be detected from real data. And log-entry.js stores exactly
-// one combined daily {customers, sales} pair for the whole business — no
-// per-product breakdown — which is precisely why the seasonal-product
-// feature is interpretive context in the prompt (see SEASONAL CONTEXT
-// there), never a mathematical exclusion or adjustment of any baseline
-// number. index.html's "Get today's read" caveat line renders off this
-// field's presence — its copy was updated in the same pass this gap was
-// added; keep the two in sync whenever this object changes again.
+// honestly left: price — PARTIALLY, precisely stated (updated 2026-07-23,
+// same day, product-economics build): per-product sellingPrice/costPerUnit
+// ARE now tracked in profile.economics (api/product-economics.js) whenever
+// the owner has actually entered them, surfaced per-slot on coreProducts
+// entries and changelogged as economics.<slot>.* diffs — so price-level
+// causes CAN now be detected for a slot with real entered price data. What
+// remains genuinely untracked: any slot the owner never filled in (honest
+// nulls, never guessed), and a business-wide priceTier (a different concept
+// from a per-product price — see _gap_priceTier in
+// reshapeProfileToRepoShape, which stays). And (named explicitly since the
+// 2026-07-23 three-slot products build) per-product sales granularity:
+// log-entry.js stores exactly one combined daily {customers, sales} pair
+// for the whole business — no per-product breakdown — which is precisely
+// why the seasonal-product feature is interpretive context in the prompt
+// (see SEASONAL CONTEXT there), never a mathematical exclusion or
+// adjustment of any baseline number. index.html's "Get today's read"
+// caveat line renders off this field's presence — its copy was updated in
+// the same pass this gap was added (and again with the product-economics
+// build); keep the two in sync whenever this object changes again.
 const CAUSAL_DATA_GAPS = {
-  priceData: 'No price/priceTier field is tracked anywhere in the stored business profile yet — price-level causes cannot be detected from real data.',
+  priceData: 'Per-product selling price and bulk-purchase ingredient cost are tracked only when the owner has entered them (profile.economics, via the Product costs & margins section) — a product the owner never filled in stays null, and no business-wide priceTier field exists at all, so price-level causes are only detectable for products with real entered price data.',
   perProductSalesData: 'Daily customers/sales are logged as one combined whole-business pair — no per-product sales breakdown exists, so a seasonal (or any) product\'s own contribution can never be mathematically separated from the baseline; seasonal-product handling is interpretive reasoning context only.',
 };
 
