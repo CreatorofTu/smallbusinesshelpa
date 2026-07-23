@@ -529,7 +529,16 @@
       return this.post('/api/save-profile', { inventory: state.inventory });
     },
     parseInventoryList(text) {
-      return this.post('/api/parse-inventory-list', { text: text });
+      // Unlike this.post() (fire-and-forget, used everywhere else in this
+      // object — nothing else here needs the response body), this call's
+      // entire point IS the response, so it does its own fetch and parses
+      // the real JSON back instead.
+      return fetch('/api/parse-inventory-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ text: text }),
+      }).then(function (r) { return r.json(); });
     },
     saveStickerBinding(sticker, itemId, itemName) {
       // Keyed by the item's stable id (never its list position) so server
