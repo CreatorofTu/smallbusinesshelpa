@@ -272,6 +272,18 @@
   .barter-value-time { font-size: .9rem; color: var(--ink-soft); margin: 0; }
   .barter-value-time strong { color: var(--ink); font-weight: 700; }
 
+  /* Merge fade — see fillMergeFadeScreen. Respects reduced-motion (an
+     instant cut, not a forced animation, for anyone who's asked for one). */
+  .merge-fade-wrap { display: flex; align-items: center; justify-content: center; min-height: 60vh; }
+  .merge-fade-text {
+    font-size: 2rem; font-weight: 800; text-align: center; margin: 0;
+    opacity: 0; transition: opacity 1.8s ease;
+  }
+  .merge-fade-text.visible { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .merge-fade-text { transition: none; }
+  }
+
   .sticker-banner {
     padding: .25rem 0;
     text-align: center;
@@ -585,9 +597,17 @@
       <p>What is your schedule across a 7 day week?</p>
       <p class="soft">Select open days, closed days, and start and close times. Outside these hours, the ai stickers won't be available.</p>
       <div class="day-list" id="day-list"></div>
+      <p class="soft">These are the days you need to come in — after the ai is finished integrating.</p>
       <button type="button" class="btn-primary" id="schedule-continue">Finish setup</button>
       <div class="status" id="schedule-status"></div>
       <button type="button" class="tertiary-link" id="schedule-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 4.5: Merge fade — a one-way ceremonial beat, not a real navigable step ============ -->
+  <section class="screen" id="screen-merge-fade" hidden>
+    <div class="merge-fade-wrap">
+      <p class="merge-fade-text" id="merge-fade-text"></p>
     </div>
   </section>
 
@@ -1047,11 +1067,11 @@
 
   const $ = function (id) { return document.getElementById(id); };
 
-  const SCREENS = ['intro', 'auth', 'setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'barter-progress', 'schedule', 'done'];
+  const SCREENS = ['intro', 'auth', 'setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'barter-progress', 'schedule', 'merge-fade', 'done'];
   // Everything from Step 1 onward requires an account. A direct deep link
   // (or any other way of landing on one of these screens without having
   // gone through auth) gets bounced back to screen-auth — see render().
-  const POST_AUTH_SCREENS = ['setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'barter-progress', 'schedule', 'done'];
+  const POST_AUTH_SCREENS = ['setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'barter-progress', 'schedule', 'merge-fade', 'done'];
 
   function go(screen) {
     state.screen = screen;
@@ -1961,6 +1981,9 @@
     });
     $('day-list').innerHTML = html;
 
+    const businessName = (state.setup && state.setup.businessName) || 'your business';
+    $('schedule-continue').textContent = 'Finish ' + businessName + '’s merge with ai';
+
     $('day-list').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         const i = Number(e.currentTarget.getAttribute('data-i'));
@@ -2016,7 +2039,30 @@
   function handleScheduleContinue() {
     saveState();
     API.saveSchedule();
-    finishOnboarding();
+    go('merge-fade');
+  }
+
+  // ---------- Screen 4.5: merge fade ----------
+  // A one-way ceremonial beat, not a real navigable step — see the section
+  // comment. Text fades in, holds so it's actually readable, then hands off
+  // to the real completion logic automatically. No button, no Back.
+  const MERGE_FADE_IN_MS = 1800;
+  const MERGE_FADE_HOLD_MS = 3200;
+  function fillMergeFadeScreen() {
+    const businessName = (state.setup && state.setup.businessName) || 'Your business';
+    const el = $('merge-fade-text');
+    el.textContent = businessName + ' AI';
+    el.classList.remove('visible');
+    clearTimeout(fillMergeFadeScreen._holdTimer);
+    // Two rAFs (not one) so the removed .visible class above is actually
+    // painted before re-adding it — otherwise the browser can coalesce both
+    // into the same frame and the opacity transition never fires.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        el.classList.add('visible');
+      });
+    });
+    fillMergeFadeScreen._holdTimer = setTimeout(finishOnboarding, MERGE_FADE_IN_MS + MERGE_FADE_HOLD_MS);
   }
 
   function finishOnboarding() {
@@ -2067,6 +2113,7 @@
     if (state.screen === 'products') fillProductScreen();
     if (state.screen === 'barter-progress') fillBarterProgressScreen();
     if (state.screen === 'schedule') renderScheduleScreen();
+    if (state.screen === 'merge-fade') fillMergeFadeScreen();
     if (state.screen === 'done') fillDoneScreen();
   }
 
