@@ -280,6 +280,9 @@ function reshapeProfileToRepoShape(profile) {
       recipe: recipeIngredients ? { ingredients: recipeIngredients } : null,
       toppings: fenceUserText(slot.toppings, 'core_product_toppings'),
       extras: fenceUserText(slot.extras, 'core_product_extras'),
+      // Plain validated number (save-profile.js's sanitizeProduct already
+      // bounds it), not free text — no fencing needed, same posture as temp.
+      currentStock: typeof slot.currentStock === 'number' ? slot.currentStock : null,
     };
     if (role === 'seasonal') {
       // Allow-listed enum, never free text — save-profile.js already

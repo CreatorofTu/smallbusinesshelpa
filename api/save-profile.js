@@ -92,6 +92,7 @@ const INVENTORY_MAX_ITEMS = 200; // sane ceiling for a single small restaurant's
 const RECIPE_MAX_LENGTH = 4000;
 const BINDINGS_MAX_KEYS = 200; // hard cap on client-supplied key count, checked before we loop
 const GOAL_TARGET_MAX = 100000; // sane ceiling for a small business's daily customer/sales count
+const STOCK_MAX = 10000; // sane ceiling for "how many of this item could you make right now" at one small business
 
 // PAYMENT (new, additive field). Replaces the old /api/onboarding-payment
 // stub, which never existed as a real file — onboarding.html's
@@ -232,6 +233,15 @@ function sanitizeBindingEntry(entry) {
 function sanitizeProduct(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const temp = raw.temp === 'Hot' || raw.temp === 'Cold' ? raw.temp : '';
+  // Same never-trust-client-shape posture as sanitizeInventory's count:
+  // Number() + Number.isFinite() so NaN/Infinity/strings never slip
+  // through, floored to a whole count, bounded by STOCK_MAX. Empty/absent
+  // input (the field is optional) yields null, not 0 — "didn't say" should
+  // never look the same as "zero in stock."
+  const stockNum = Number(raw.currentStock);
+  const currentStock = raw.currentStock !== '' && Number.isFinite(stockNum) && stockNum >= 0 && stockNum <= STOCK_MAX
+    ? Math.floor(stockNum)
+    : null;
   // recipe is deliberately NOT handled here even though it's accepted now
   // (see the RECIPE REVERSAL note in the file header): this function's
   // output is plaintext-merged into the slot's stored object, and the
@@ -245,6 +255,7 @@ function sanitizeProduct(raw) {
     temp: temp,
     toppings: cleanString(raw.toppings, 400),
     extras: cleanString(raw.extras, 400),
+    currentStock: currentStock,
   };
 }
 
@@ -390,6 +401,7 @@ function shapeProfileForResume(profile) {
       toppings: typeof slot.toppings === 'string' ? slot.toppings : '',
       extras: typeof slot.extras === 'string' ? slot.extras : '',
       season: typeof slot.season === 'string' ? slot.season : undefined,
+      currentStock: typeof slot.currentStock === 'number' ? slot.currentStock : null,
       hasRecipe: !!(slot.recipe && typeof slot.recipe === 'object'),
     };
   }
@@ -732,6 +744,7 @@ module.exports = async function handler(req, res) {
       diffField('products.' + slot + '.temp', 'temp', oldSlot.temp, newSlot.temp);
       diffField('products.' + slot + '.toppings', 'toppings', oldSlot.toppings, newSlot.toppings);
       diffField('products.' + slot + '.extras', 'extras', oldSlot.extras, newSlot.extras);
+      diffField('products.' + slot + '.currentStock', 'currentStock', oldSlot.currentStock, newSlot.currentStock);
       if (slot === 'seasonal') {
         diffField('products.seasonal.season', 'season', oldSlot.season, newSlot.season);
       }

@@ -245,12 +245,32 @@
     display: flex; flex-direction: column; gap: .85rem;
   }
   .core-badge { font-weight: 700; font-size: .95rem; margin: 0; }
+  .barter-ingredient-picker { display: flex; flex-direction: column; gap: .3rem; }
+  .barter-ingredient-heading { font-weight: 700; font-size: .95rem; margin: 0 0 .2rem; }
 
   /* Barter demo interstitial — the one deliberate new green in this app,
      same "success" convention as the inventory plus-button green, used
      here for the one manufactured "it worked" reveal (see
      fillBarterProgressScreen's own header comment for why it's staged). */
   .barter-success-text { color: #1a7f37; font-weight: 700; }
+  /* Value-comparison block: a rough-but-defensible model of what the same
+     ingredient would've cost through DoorDash/Instacart (item markup +
+     delivery + service + small-order fee + tip) against the real bulk
+     ingredient cost of the free waffle traded for it. Fixed numbers, not
+     computed per-ingredient — this is an illustrative demo figure, not a
+     live price feed, and it's the same $17 the success text above already
+     claims, so the two never disagree on screen. */
+  .barter-value-compare {
+    display: flex; flex-direction: column; gap: 1rem;
+    padding: 1rem 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  }
+  .barter-value-row { display: flex; flex-direction: column; gap: .2rem; }
+  .barter-value-label { font-size: .85rem; color: var(--ink-soft); margin: 0; }
+  .barter-value-big { font-size: 2.4rem; font-weight: 800; margin: 0; line-height: 1.1; }
+  .barter-value-big.barter-value-good { color: #1a7f37; }
+  .barter-value-breakdown { margin: 0; }
+  .barter-value-time { font-size: .9rem; color: var(--ink-soft); margin: 0; }
+  .barter-value-time strong { color: var(--ink); font-weight: 700; }
 
   .sticker-banner {
     padding: .25rem 0;
@@ -496,23 +516,24 @@
         <label>1. What type?
           <input type="text" id="product-type" placeholder="Eggo, Belgian, Brioche, Buttermilk?" required>
         </label>
-        <div class="field-label">2. Is it served hot or cold?
-          <div class="ob-toggle" id="product-temp">
-            <button type="button" class="ob-toggle-opt" data-opt="Hot">Hot</button>
-            <button type="button" class="ob-toggle-opt" data-opt="Cold">Cold</button>
-          </div>
-        </div>
-        <label>3. What toppings/sides are usually included with it?
-          <input type="text" id="product-toppings" required>
-        </label>
-        <label>4. Any other significant items that could've been here? Matcha tea? (Optional)
-          <input type="text" id="product-extras">
-        </label>
-        <label>5. The most important part — your recipe. Ingredients only, one per line.
+        <label>2. The most important part — your recipe. Ingredients only, one per line.
           <textarea id="product-recipe" placeholder="One ingredient per line" required></textarea>
         </label>
         <p class="soft">Your recipe is locked with encryption the moment it's saved — no person can read it. Not us, not staff, nobody. The system only unlocks it for a moment to catch when a recipe change moves your numbers. Never shown to anyone, never shared, never sold.</p>
+        <label>3. What's your current stock like? Roughly how many you could make with what's on hand right now.
+          <input type="number" id="product-stock" inputmode="numeric" min="0" placeholder="e.g. 40">
+        </label>
         <div class="status" id="product-status"></div>
+      </div>
+
+      <div class="barter-ingredient-picker">
+        <p class="barter-ingredient-heading">Need an ingredient right now? We'll get it for you — free of charge.</p>
+        <label class="ob-checkbox-row"><input type="checkbox" class="barter-ingredient-opt" value="flour"> Flour</label>
+        <label class="ob-checkbox-row"><input type="checkbox" class="barter-ingredient-opt" value="sugar"> Sugar</label>
+        <label class="ob-checkbox-row"><input type="checkbox" class="barter-ingredient-opt" value="eggs"> Eggs</label>
+        <label class="ob-checkbox-row"><input type="checkbox" class="barter-ingredient-opt" value="brown sugar"> Brown sugar</label>
+        <label class="ob-checkbox-row"><input type="checkbox" class="barter-ingredient-opt" value="butter"> Butter</label>
+        <label class="ob-checkbox-row"><input type="checkbox" class="barter-ingredient-opt" value="milk"> Milk</label>
       </div>
 
       <label class="ob-checkbox-row">
@@ -536,6 +557,21 @@
       <div id="barter-progress-success" hidden>
         <h1>Done</h1>
         <p class="barter-success-text" id="barter-progress-success-text"></p>
+
+        <div class="barter-value-compare">
+          <div class="barter-value-row">
+            <p class="barter-value-label">If you'd used DoorDash/Instacart</p>
+            <p class="barter-value-big">$17</p>
+            <p class="soft barter-value-breakdown">$4 item (~15% markup over retail) + $6 delivery fee + $3 service fee + $2 small-order fee + $2 tip</p>
+          </div>
+          <div class="barter-value-row">
+            <p class="barter-value-label">What it actually cost you</p>
+            <p class="barter-value-big barter-value-good">$0.85</p>
+            <p class="soft barter-value-breakdown" id="barter-value-actual-breakdown"></p>
+          </div>
+          <p class="barter-value-time"><strong>~35 min</strong> saved &mdash; no dedicated trip or delivery wait, since they were coming by anyway</p>
+        </div>
+
         <button type="button" class="btn-primary" id="barter-progress-continue">Integrate your shop while we wait</button>
       </div>
     </div>
@@ -729,6 +765,7 @@
             toppings: main.toppings,
             extras: main.extras,
             recipe: main.recipe,
+            currentStock: main.currentStock,
           },
           secondary: secondary
             ? {
@@ -889,7 +926,7 @@
 
   // ---- three-slot product helpers (see the THREE-SLOT note above) ----
   function emptyProductSlot() {
-    return { type: '', temp: '', toppings: '', extras: '', recipe: '' };
+    return { type: '', temp: '', toppings: '', extras: '', recipe: '', currentStock: '' };
   }
   // "Filled in" = has a real type — the one field every slot screen
   // requires before saving. Guards completeOnboarding() against sending a
@@ -1168,6 +1205,7 @@
             temp: restored.temp || '',
             toppings: restored.toppings || '',
             extras: restored.extras || '',
+            currentStock: typeof restored.currentStock === 'number' ? String(restored.currentStock) : '',
             // recipe deliberately left '' — never returned by the server,
             // see the header comment above.
           });
@@ -1814,30 +1852,23 @@
       ? 'What type of ' + state.setup.coreProduct + '?'
       : 'Eggo, Belgian, Brioche, Buttermilk?';
     $('product-type').value = state.products.main.type;
-    $('product-toppings').value = state.products.main.toppings;
-    $('product-extras').value = state.products.main.extras;
     $('product-recipe').value = state.products.main.recipe;
-    renderTempToggle();
-  }
-
-  function renderTempToggle() {
-    $('product-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
-      btn.classList.toggle('selected', btn.getAttribute('data-opt') === state.products.main.temp);
-    });
-  }
-
-  function handleTempTap(e) {
-    state.products.main.temp = e.currentTarget.getAttribute('data-opt');
-    saveState();
-    $('product-status').textContent = '';
-    renderTempToggle();
+    $('product-stock').value = state.products.main.currentStock || '';
   }
 
   // The CTA doubles as the barter-consent action, so it stays disabled
-  // until the box is checked — no separate validation round-trip needed
-  // for a real permission decision like this one.
-  function handleBarterConsentToggle(e) {
-    $('products-continue').disabled = !e.target.checked;
+  // until both real requirements are met — no separate validation
+  // round-trip needed for something this simple to check live.
+  function checkedIngredients() {
+    return Array.from(document.querySelectorAll('.barter-ingredient-opt:checked')).map(function (el) { return el.value; });
+  }
+  function updateProductsContinueState() {
+    $('products-continue').disabled = !($('barter-consent').checked && checkedIngredients().length > 0);
+  }
+  function joinNatural(items) {
+    if (items.length <= 1) return items[0] || '';
+    if (items.length === 2) return items[0] + ' and ' + items[1];
+    return items.slice(0, -1).join(', ') + ', and ' + items[items.length - 1];
   }
 
   // Secondary/seasonal products are no longer collected during onboarding
@@ -1846,30 +1877,24 @@
   // validates/saves the one core product, then hands off to the Barter
   // demo interstitial instead of going straight to Schedule.
   function handleProductsContinue() {
-    if (!state.products.main.temp) {
-      $('product-status').textContent = 'Tap Hot or Cold first.';
-      return;
-    }
     const mainType = $('product-type').value.trim();
-    const mainToppings = $('product-toppings').value.trim();
     const mainRecipe = $('product-recipe').value;
-    if (!mainType || !mainToppings || !mainRecipe.trim()) {
-      $('product-status').textContent = 'Fill in type, toppings, and recipe before continuing.';
+    if (!mainType || !mainRecipe.trim()) {
+      $('product-status').textContent = 'Fill in the type and recipe before continuing.';
       return;
     }
-    if (!$('barter-consent').checked) {
-      $('product-status').textContent = 'Check the box above first.';
+    if (!$('barter-consent').checked || checkedIngredients().length === 0) {
+      $('product-status').textContent = 'Pick at least one ingredient and check the box above first.';
       return;
     }
     $('product-status').textContent = '';
 
     state.products.main.type = mainType;
-    state.products.main.toppings = mainToppings;
-    state.products.main.extras = $('product-extras').value.trim();
     // Recipe: kept in local state here, then sent to the server ONCE, at
     // completeOnboarding() — since 2026-07-23 (founder-directed reversal;
     // see the seam-wide PRIVACY note above). It used to be local-only.
     state.products.main.recipe = mainRecipe;
+    state.products.main.currentStock = $('product-stock').value.trim();
     saveState();
     go('barter-progress');
   }
@@ -1895,13 +1920,19 @@
     const typedType = $('product-type').value.trim();
     const coreProduct = (state.setup && state.setup.coreProduct) || 'treat';
     const productLabel = (typedType ? typedType + ' ' + coreProduct : coreProduct).trim();
-    const ingredient = STAPLE_INGREDIENTS[Math.floor(Math.random() * STAPLE_INGREDIENTS.length)];
+    // Uses whatever the owner actually picked in the ingredient list above
+    // — falls back to a random staple only if somehow nothing was checked
+    // (shouldn't happen, since handleProductsContinue already requires it).
+    const picked = checkedIngredients();
+    const ingredient = joinNatural(picked.length ? picked : [STAPLE_INGREDIENTS[Math.floor(Math.random() * STAPLE_INGREDIENTS.length)]]);
     const name = DEMO_BARTER_NAMES[Math.floor(Math.random() * DEMO_BARTER_NAMES.length)];
 
     $('barter-progress-loading-text').textContent = 'Getting your ' + ingredient + ' now…';
     $('barter-progress-success-text').textContent =
       name + ', a Barter member already coming by, is bringing your ' + ingredient +
       ' — you saved about $17 in delivery and service fees by trading a free ' + productLabel + ' instead.';
+    $('barter-value-actual-breakdown').textContent =
+      'Bulk ingredient cost of one free ' + productLabel;
 
     clearTimeout(fillBarterProgressScreen._timer);
     fillBarterProgressScreen._timer = setTimeout(function () {
@@ -2175,10 +2206,10 @@
       go('inventory');
     });
 
-    $('product-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
-      btn.addEventListener('click', handleTempTap);
+    $('barter-consent').addEventListener('change', updateProductsContinueState);
+    document.querySelectorAll('.barter-ingredient-opt').forEach(function (cb) {
+      cb.addEventListener('change', updateProductsContinueState);
     });
-    $('barter-consent').addEventListener('change', handleBarterConsentToggle);
     $('products-continue').addEventListener('click', handleProductsContinue);
     $('product-back').addEventListener('click', function () { go('stickers'); });
 
