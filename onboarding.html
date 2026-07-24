@@ -239,6 +239,17 @@
   }
   .inv-add:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
+  /* Products screen: main/secondary/seasonal are one continuous scroll
+     instead of 3 separate navigations — a hairline divider (matching the
+     day-card convention) separates entries once more than one is showing. */
+  .product-entry {
+    display: flex; flex-direction: column; gap: .85rem;
+    padding-top: 1rem; border-top: 1px solid var(--line);
+  }
+  .product-entry.product-main { padding-top: 0; border-top: none; }
+  .core-badge { font-weight: 700; font-size: .95rem; margin: 0; }
+  .product-add-row { display: flex; flex-direction: column; gap: .6rem; }
+
   .sticker-banner {
     padding: .25rem 0;
     text-align: center;
@@ -472,12 +483,14 @@
     </div>
   </section>
 
-  <!-- ============ Screen 3: Core product questions ============ -->
-  <section class="screen" id="screen-product" hidden>
+  <!-- ============ Screen 3: Products (main, starred as core, plus optional secondary/seasonal added inline — no forced navigation between them) ============ -->
+  <section class="screen" id="screen-products" hidden>
     <div class="card">
       <div class="ob-progress">Step 3 of 3</div>
       <h1 id="product-heading">Time to tell the ai what makes you special</h1>
-      <form id="product-form">
+
+      <div class="product-entry product-main">
+        <p class="core-badge">&#9733; Your core product &mdash; the one you're synonymous with</p>
         <label>1. What type?
           <input type="text" id="product-type" placeholder="Eggo, Belgian, Brioche, Buttermilk?" required>
         </label>
@@ -497,20 +510,16 @@
           <textarea id="product-recipe" placeholder="One ingredient per line" required></textarea>
         </label>
         <p class="soft">Your recipe is locked with encryption the moment it's saved — no person can read it. Not us, not staff, nobody. The system only unlocks it for a moment to catch when a recipe change moves your numbers. Never shown to anyone, never shared, never sold.</p>
-        <button type="submit" class="btn-primary">Continue</button>
-      </form>
-      <div class="status" id="product-status"></div>
-      <button type="button" class="tertiary-link" id="product-back">Back</button>
-    </div>
-  </section>
+        <div class="status" id="product-status"></div>
+      </div>
 
-  <!-- ============ Screen 3b: Secondary product (optional) ============ -->
-  <section class="screen" id="screen-product2" hidden>
-    <div class="card">
-      <div class="ob-progress">Step 3 of 3</div>
-      <h1>Anything usually sold alongside it?</h1>
-      <p class="soft">A secondary product that usually accompanies your main one in the shop — a coffee, a drink, a matcha tea. It counts as part of your normal baseline, same as your main product. Optional — skip it if there isn't one.</p>
-      <form id="product2-form">
+      <div class="product-add-row">
+        <button type="button" class="inv-add" id="show-secondary-btn">+ Add a secondary product — usually sold alongside it</button>
+        <button type="button" class="inv-add" id="show-seasonal-btn">+ Add a seasonal product — only part of the year</button>
+      </div>
+
+      <div class="product-entry" id="secondary-entry" hidden>
+        <p class="soft">A secondary product that usually accompanies your main one in the shop — a coffee, a drink, a matcha tea. It counts as part of your normal baseline, same as your main product.</p>
         <label>1. What is it?
           <input type="text" id="product2-type" placeholder="Coffee, a drink, matcha tea?">
         </label>
@@ -530,22 +539,13 @@
           <textarea id="product2-recipe" placeholder="One ingredient per line"></textarea>
         </label>
         <p class="soft">Locked with the same encryption as your main recipe — no person can read it.</p>
-        <button type="submit" class="btn-primary">Save and continue</button>
-      </form>
-      <div class="status" id="product2-status"></div>
-      <button type="button" class="tertiary-link" id="product2-skip">Skip — no secondary product</button>
-      <button type="button" class="tertiary-link" id="product2-back">Back</button>
-    </div>
-  </section>
+        <div class="status" id="product2-status"></div>
+        <button type="button" class="tertiary-link" id="remove-secondary-btn">Remove this product</button>
+      </div>
 
-  <!-- ============ Screen 3c: Seasonal product (optional) ============ -->
-  <section class="screen" id="screen-product3" hidden>
-    <div class="card">
-      <div class="ob-progress">Step 3 of 3</div>
-      <h1>Any seasonal product?</h1>
-      <p class="soft">Something that's popular during one part of the year — a summer drink, a holiday special. Optional — skip it if there isn't one.</p>
-      <p class="soft">This is context for your ai, not a change to your numbers: your daily total stays one combined number, so nothing here adjusts any baseline math. It just lets the ai connect a seasonal swing to the season starting or ending, instead of flagging it as unexplained.</p>
-      <form id="product3-form">
+      <div class="product-entry" id="seasonal-entry" hidden>
+        <p class="soft">Something that's popular during one part of the year — a summer drink, a holiday special.</p>
+        <p class="soft">This is context for your ai, not a change to your numbers: your daily total stays one combined number, so nothing here adjusts any baseline math. It just lets the ai connect a seasonal swing to the season starting or ending, instead of flagging it as unexplained.</p>
         <label>1. What is it?
           <input type="text" id="product3-type" placeholder="A summer lemonade? A holiday special?">
         </label>
@@ -571,11 +571,13 @@
           <textarea id="product3-recipe" placeholder="One ingredient per line"></textarea>
         </label>
         <p class="soft">Locked with the same encryption as your main recipe — no person can read it.</p>
-        <button type="submit" class="btn-primary">Save and continue</button>
-      </form>
-      <div class="status" id="product3-status"></div>
-      <button type="button" class="tertiary-link" id="product3-skip">Skip — no seasonal product</button>
-      <button type="button" class="tertiary-link" id="product3-back">Back</button>
+        <div class="status" id="product3-status"></div>
+        <button type="button" class="tertiary-link" id="remove-seasonal-btn">Remove this product</button>
+      </div>
+
+      <button type="button" class="btn-primary" id="products-continue">Continue</button>
+      <div class="status" id="products-status"></div>
+      <button type="button" class="tertiary-link" id="product-back">Back</button>
     </div>
   </section>
 
@@ -1048,11 +1050,11 @@
 
   const $ = function (id) { return document.getElementById(id); };
 
-  const SCREENS = ['intro', 'auth', 'setup', 'package', 'manual', 'inventory', 'stickers', 'product', 'product2', 'product3', 'schedule', 'done'];
+  const SCREENS = ['intro', 'auth', 'setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'schedule', 'done'];
   // Everything from Step 1 onward requires an account. A direct deep link
   // (or any other way of landing on one of these screens without having
   // gone through auth) gets bounced back to screen-auth — see render().
-  const POST_AUTH_SCREENS = ['setup', 'package', 'manual', 'inventory', 'stickers', 'product', 'product2', 'product3', 'schedule', 'done'];
+  const POST_AUTH_SCREENS = ['setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'schedule', 'done'];
 
   function go(screen) {
     state.screen = screen;
@@ -1871,23 +1873,6 @@
     renderTempToggle();
   }
 
-  function handleProductSubmit(e) {
-    e.preventDefault();
-    if (!state.products.main.temp) {
-      $('product-status').textContent = 'Tap Hot or Cold first.';
-      return;
-    }
-    state.products.main.type = $('product-type').value.trim();
-    state.products.main.toppings = $('product-toppings').value.trim();
-    state.products.main.extras = $('product-extras').value.trim();
-    // Recipe: kept in local state here, then sent to the server ONCE, at
-    // completeOnboarding() — since 2026-07-23 (founder-directed reversal;
-    // see the seam-wide PRIVACY note above). It used to be local-only.
-    state.products.main.recipe = $('product-recipe').value;
-    saveState();
-    go('product2');
-  }
-
   // ---------- Screen 3b: SECONDARY product (optional) ----------
   // Drafts write straight into state.products.secondary (created on first
   // touch) so a temp tap survives a reload, but completeOnboarding() only
@@ -1920,32 +1905,23 @@
     renderTemp2Toggle();
   }
 
-  function handleProduct2Submit(e) {
-    e.preventDefault();
-    const type = $('product2-type').value.trim();
-    if (!type) {
-      $('product2-status').textContent = 'Type what it is, or tap Skip below.';
-      return;
-    }
-    if (!(state.products.secondary && state.products.secondary.temp)) {
-      $('product2-status').textContent = 'Tap Hot or Cold first.';
-      return;
-    }
-    const slot = ensureSecondary();
-    slot.type = type;
-    slot.toppings = $('product2-toppings').value.trim();
-    slot.extras = $('product2-extras').value.trim();
-    slot.recipe = $('product2-recipe').value;
-    saveState();
-    go('product3');
+  // Reveals the card in place (no navigation) — see handleProductsContinue,
+  // which is where this slot actually gets validated and saved.
+  function handleShowSecondary() {
+    $('secondary-entry').hidden = false;
+    $('show-secondary-btn').hidden = true;
+    fillProduct2Screen();
+    $('product2-type').focus();
   }
 
-  function handleProduct2Skip() {
-    // Skip means "no secondary product" — clears any half-typed draft so a
+  function handleRemoveSecondary() {
+    // Same as the old Skip button: clears any half-typed draft so a
     // partially-filled slot can't linger and ship later by accident.
     state.products.secondary = null;
     saveState();
-    go('product3');
+    $('secondary-entry').hidden = true;
+    $('show-secondary-btn').hidden = false;
+    $('product2-status').textContent = '';
   }
 
   // ---------- Screen 3c: SEASONAL product (optional) ----------
@@ -1982,36 +1958,122 @@
     renderTemp3Toggle();
   }
 
-  function handleProduct3Submit(e) {
-    e.preventDefault();
-    const type = $('product3-type').value.trim();
-    if (!type) {
-      $('product3-status').textContent = 'Type what it is, or tap Skip below.';
-      return;
-    }
-    const season = $('product3-season').value;
-    if (['winter', 'spring', 'summer', 'fall'].indexOf(season) === -1) {
-      $('product3-season').focus();
-      $('product3-status').textContent = 'Pick which season it sells in.';
-      return;
-    }
-    if (!(state.products.seasonal && state.products.seasonal.temp)) {
-      $('product3-status').textContent = 'Tap Hot or Cold first.';
-      return;
-    }
-    const slot = ensureSeasonal();
-    slot.type = type;
-    slot.season = season;
-    slot.toppings = $('product3-toppings').value.trim();
-    slot.recipe = $('product3-recipe').value;
-    saveState();
-    go('schedule');
+  // Reveals the card in place — see handleProductsContinue for validation/save.
+  function handleShowSeasonal() {
+    $('seasonal-entry').hidden = false;
+    $('show-seasonal-btn').hidden = true;
+    fillProduct3Screen();
+    $('product3-type').focus();
   }
 
-  function handleProduct3Skip() {
-    // Skip means "no seasonal product" — clears any half-typed draft, same
-    // reasoning as the secondary screen's skip.
+  function handleRemoveSeasonal() {
+    // Same as the old Skip button: clears any half-typed draft, same
+    // reasoning as handleRemoveSecondary.
     state.products.seasonal = null;
+    saveState();
+    $('seasonal-entry').hidden = true;
+    $('show-seasonal-btn').hidden = false;
+    $('product3-status').textContent = '';
+  }
+
+  function fillProductsScreen() {
+    fillProductScreen();
+    if (state.products.secondary) {
+      $('secondary-entry').hidden = false;
+      $('show-secondary-btn').hidden = true;
+      fillProduct2Screen();
+    } else {
+      $('secondary-entry').hidden = true;
+      $('show-secondary-btn').hidden = false;
+    }
+    if (state.products.seasonal) {
+      $('seasonal-entry').hidden = false;
+      $('show-seasonal-btn').hidden = true;
+      fillProduct3Screen();
+    } else {
+      $('seasonal-entry').hidden = true;
+      $('show-seasonal-btn').hidden = false;
+    }
+  }
+
+  // One shared validate-and-advance for all of Screen 3 — each slot is only
+  // checked if its card is currently expanded (i.e. the owner opted in by
+  // revealing it, or it already had real saved data). Never leaves the
+  // screen until the loop of "want to add another?" is actually closed.
+  function handleProductsContinue() {
+    if (!state.products.main.temp) {
+      $('product-status').textContent = 'Tap Hot or Cold first.';
+      return;
+    }
+    const mainType = $('product-type').value.trim();
+    const mainToppings = $('product-toppings').value.trim();
+    const mainRecipe = $('product-recipe').value;
+    if (!mainType || !mainToppings || !mainRecipe.trim()) {
+      $('product-status').textContent = 'Fill in type, toppings, and recipe before continuing.';
+      return;
+    }
+    $('product-status').textContent = '';
+
+    if (!$('secondary-entry').hidden) {
+      const type2 = $('product2-type').value.trim();
+      if (!type2) {
+        $('product2-status').textContent = 'Type what it is, or tap Remove this product below.';
+        return;
+      }
+      if (!(state.products.secondary && state.products.secondary.temp)) {
+        $('product2-status').textContent = 'Tap Hot or Cold first.';
+        return;
+      }
+      $('product2-status').textContent = '';
+    } else {
+      state.products.secondary = null;
+    }
+
+    if (!$('seasonal-entry').hidden) {
+      const type3 = $('product3-type').value.trim();
+      if (!type3) {
+        $('product3-status').textContent = 'Type what it is, or tap Remove this product below.';
+        return;
+      }
+      const season3 = $('product3-season').value;
+      if (['winter', 'spring', 'summer', 'fall'].indexOf(season3) === -1) {
+        $('product3-season').focus();
+        $('product3-status').textContent = 'Pick which season it sells in.';
+        return;
+      }
+      if (!(state.products.seasonal && state.products.seasonal.temp)) {
+        $('product3-status').textContent = 'Tap Hot or Cold first.';
+        return;
+      }
+      $('product3-status').textContent = '';
+    } else {
+      state.products.seasonal = null;
+    }
+
+    // All open cards passed — now actually write every field (temp was
+    // already saved live by the tap handlers above).
+    state.products.main.type = mainType;
+    state.products.main.toppings = mainToppings;
+    state.products.main.extras = $('product-extras').value.trim();
+    // Recipe: kept in local state here, then sent to the server ONCE, at
+    // completeOnboarding() — since 2026-07-23 (founder-directed reversal;
+    // see the seam-wide PRIVACY note above). It used to be local-only.
+    state.products.main.recipe = mainRecipe;
+
+    if (state.products.secondary) {
+      const slot2 = ensureSecondary();
+      slot2.type = $('product2-type').value.trim();
+      slot2.toppings = $('product2-toppings').value.trim();
+      slot2.extras = $('product2-extras').value.trim();
+      slot2.recipe = $('product2-recipe').value;
+    }
+    if (state.products.seasonal) {
+      const slot3 = ensureSeasonal();
+      slot3.type = $('product3-type').value.trim();
+      slot3.season = $('product3-season').value;
+      slot3.toppings = $('product3-toppings').value.trim();
+      slot3.recipe = $('product3-recipe').value;
+    }
     saveState();
     go('schedule');
   }
@@ -2139,9 +2201,7 @@
     if (state.screen === 'package') fillPackageScreen();
     if (state.screen === 'inventory') renderInventoryRows();
     if (state.screen === 'stickers') renderStickerScreen();
-    if (state.screen === 'product') fillProductScreen();
-    if (state.screen === 'product2') fillProduct2Screen();
-    if (state.screen === 'product3') fillProduct3Screen();
+    if (state.screen === 'products') fillProductsScreen();
     if (state.screen === 'schedule') renderScheduleScreen();
     if (state.screen === 'done') fillDoneScreen();
   }
@@ -2273,8 +2333,8 @@
     $('sticker-scanner-close').addEventListener('click', stopStickerScanner);
     // Camera must never keep running once this screen is left, in either
     // direction — released on Continue (both variants) and Back alike.
-    $('sticker-continue').addEventListener('click', function () { stopStickerScanner(); go('product'); });
-    $('sticker-continue-anyway').addEventListener('click', function () { stopStickerScanner(); go('product'); });
+    $('sticker-continue').addEventListener('click', function () { stopStickerScanner(); go('products'); });
+    $('sticker-continue-anyway').addEventListener('click', function () { stopStickerScanner(); go('products'); });
     $('sticker-back').addEventListener('click', function () {
       stopStickerScanner();
       state.inventorySubmitted = false;
@@ -2282,28 +2342,24 @@
       go('inventory');
     });
 
-    $('product-form').addEventListener('submit', handleProductSubmit);
     $('product-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
       btn.addEventListener('click', handleTempTap);
     });
-    $('product-back').addEventListener('click', function () { go('stickers'); });
-
-    $('product2-form').addEventListener('submit', handleProduct2Submit);
+    $('show-secondary-btn').addEventListener('click', handleShowSecondary);
     $('product2-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
       btn.addEventListener('click', handleTemp2Tap);
     });
-    $('product2-skip').addEventListener('click', handleProduct2Skip);
-    $('product2-back').addEventListener('click', function () { go('product'); });
-
-    $('product3-form').addEventListener('submit', handleProduct3Submit);
+    $('remove-secondary-btn').addEventListener('click', handleRemoveSecondary);
+    $('show-seasonal-btn').addEventListener('click', handleShowSeasonal);
     $('product3-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
       btn.addEventListener('click', handleTemp3Tap);
     });
-    $('product3-skip').addEventListener('click', handleProduct3Skip);
-    $('product3-back').addEventListener('click', function () { go('product2'); });
+    $('remove-seasonal-btn').addEventListener('click', handleRemoveSeasonal);
+    $('products-continue').addEventListener('click', handleProductsContinue);
+    $('product-back').addEventListener('click', function () { go('stickers'); });
 
     $('schedule-continue').addEventListener('click', handleScheduleContinue);
-    $('schedule-back').addEventListener('click', function () { go('product3'); });
+    $('schedule-back').addEventListener('click', function () { go('products'); });
 
     $('done-open-app').addEventListener('click', function () { location.href = '/index.html'; });
     $('done-back').addEventListener('click', function () { go('schedule'); });
