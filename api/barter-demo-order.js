@@ -50,14 +50,20 @@ module.exports = async function handler(req, res) {
   const productTypeRaw = typeof req.body?.productType === 'string' ? req.body.productType.trim().slice(0, PRODUCT_TYPE_MAX) : '';
   const productType = productTypeRaw || 'treat';
 
-  const ingredient = STAPLE_INGREDIENTS[Math.floor(Math.random() * STAPLE_INGREDIENTS.length)];
+  // Optional override so a real manual test (or a future real trigger) can
+  // name the actual ingredient instead of a random staple pick.
+  const ingredientRaw = typeof req.body?.ingredient === 'string' ? req.body.ingredient.trim().slice(0, PRODUCT_TYPE_MAX) : '';
+  const ingredient = ingredientRaw || STAPLE_INGREDIENTS[Math.floor(Math.random() * STAPLE_INGREDIENTS.length)];
   const description = `We're running low on ${ingredient} — bring some by and get a free ${productType} on the house, it's on the way!`;
 
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
-  // demo: true marks this apart from a real admin-broadcast order — same
-  // KV shape either way, so barter-claim.js needs no changes to read it.
-  const order = { id, description, reward: productType, status: 'open', createdAt, demo: true };
+  // accountId: which business this request is for — barter-claim.js reads
+  // this on a successful claim to notify the right business's own push
+  // subscription (pushsub:<accountId>) that help is on the way. demo: true
+  // marks this apart from a real admin-broadcast order — same KV shape
+  // either way, so barter-claim.js's read/claim logic needs no changes.
+  const order = { id, description, reward: productType, ingredient, status: 'open', createdAt, demo: true, accountId: session.accountId };
   await kv.set(`barterorder:${id}`, order, { ex: BARTERORDER_TTL_SECONDS });
 
   res.status(200).json({ id, claimUrl: '/barter.html?claim=' + id });
