@@ -239,20 +239,18 @@
   }
   .inv-add:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-  /* Products screen: main/secondary/seasonal are one continuous scroll
-     instead of 3 separate navigations — a hairline divider (matching the
-     day-card convention) separates entries once more than one is showing. */
+  /* Products screen: core product only — onboarding no longer collects
+     secondary/seasonal products (that's a later, spare-time step). */
   .product-entry {
     display: flex; flex-direction: column; gap: .85rem;
-    padding-top: 1rem; border-top: 1px solid var(--line);
   }
-  .product-entry.product-main { padding-top: 0; border-top: none; }
   .core-badge { font-weight: 700; font-size: .95rem; margin: 0; }
-  .product-add-row { display: flex; flex-direction: column; gap: .6rem; }
-  .barter-demo-row {
-    display: flex; flex-direction: column; gap: .5rem;
-    padding-top: 1rem; border-top: 1px solid var(--line);
-  }
+
+  /* Barter demo interstitial — the one deliberate new green in this app,
+     same "success" convention as the inventory plus-button green, used
+     here for the one manufactured "it worked" reveal (see
+     fillBarterProgressScreen's own header comment for why it's staged). */
+  .barter-success-text { color: #1a7f37; font-weight: 700; }
 
   .sticker-banner {
     padding: .25rem 0;
@@ -487,7 +485,7 @@
     </div>
   </section>
 
-  <!-- ============ Screen 3: Products (main, starred as core, plus optional secondary/seasonal added inline — no forced navigation between them) ============ -->
+  <!-- ============ Screen 3: Products (core product ONLY — secondary/seasonal are a later, spare-time step, not onboarding) ============ -->
   <section class="screen" id="screen-products" hidden>
     <div class="card">
       <div class="ob-progress">Step 3 of 3</div>
@@ -517,77 +515,29 @@
         <div class="status" id="product-status"></div>
       </div>
 
-      <div class="barter-demo-row">
-        <p class="soft">Your AI manager can bring customers in the door itself, too.</p>
-        <button type="button" class="inv-add" id="barter-demo-btn">Give it a try — see what your customers would see</button>
-        <div class="status" id="barter-demo-status"></div>
-      </div>
+      <label class="ob-checkbox-row">
+        <input type="checkbox" id="barter-consent">
+        I give my AI manager permission to exchange goods for service on my behalf
+      </label>
 
-      <div class="product-add-row">
-        <button type="button" class="inv-add" id="show-secondary-btn">+ Add a secondary product — usually sold alongside it</button>
-        <button type="button" class="inv-add" id="show-seasonal-btn">+ Add a seasonal product — only part of the year</button>
-      </div>
-
-      <div class="product-entry" id="secondary-entry" hidden>
-        <p class="soft">A secondary product that usually accompanies your main one in the shop — a coffee, a drink, a matcha tea. It counts as part of your normal baseline, same as your main product.</p>
-        <label>1. What is it?
-          <input type="text" id="product2-type" placeholder="Coffee, a drink, matcha tea?">
-        </label>
-        <div class="field-label">2. Is it served hot or cold?
-          <div class="ob-toggle" id="product2-temp">
-            <button type="button" class="ob-toggle-opt" data-opt="Hot">Hot</button>
-            <button type="button" class="ob-toggle-opt" data-opt="Cold">Cold</button>
-          </div>
-        </div>
-        <label>3. What toppings/sides usually come with it? (Optional)
-          <input type="text" id="product2-toppings">
-        </label>
-        <label>4. Any other significant items that could've been here instead? (Optional)
-          <input type="text" id="product2-extras">
-        </label>
-        <label>5. Its recipe, ingredients only. (Optional)
-          <textarea id="product2-recipe" placeholder="One ingredient per line"></textarea>
-        </label>
-        <p class="soft">Locked with the same encryption as your main recipe — no person can read it.</p>
-        <div class="status" id="product2-status"></div>
-        <button type="button" class="tertiary-link" id="remove-secondary-btn">Remove this product</button>
-      </div>
-
-      <div class="product-entry" id="seasonal-entry" hidden>
-        <p class="soft">Something that's popular during one part of the year — a summer drink, a holiday special.</p>
-        <p class="soft">This is context for your ai, not a change to your numbers: your daily total stays one combined number, so nothing here adjusts any baseline math. It just lets the ai connect a seasonal swing to the season starting or ending, instead of flagging it as unexplained.</p>
-        <label>1. What is it?
-          <input type="text" id="product3-type" placeholder="A summer lemonade? A holiday special?">
-        </label>
-        <label>Which season does it sell in?
-          <select id="product3-season">
-            <option value="">Pick a season</option>
-            <option value="winter">Winter (Dec&ndash;Feb)</option>
-            <option value="spring">Spring (Mar&ndash;May)</option>
-            <option value="summer">Summer (Jun&ndash;Aug)</option>
-            <option value="fall">Fall (Sep&ndash;Nov)</option>
-          </select>
-        </label>
-        <div class="field-label">2. Is it served hot or cold?
-          <div class="ob-toggle" id="product3-temp">
-            <button type="button" class="ob-toggle-opt" data-opt="Hot">Hot</button>
-            <button type="button" class="ob-toggle-opt" data-opt="Cold">Cold</button>
-          </div>
-        </div>
-        <label>3. What toppings/sides usually come with it? (Optional)
-          <input type="text" id="product3-toppings">
-        </label>
-        <label>4. Its recipe, ingredients only. (Optional)
-          <textarea id="product3-recipe" placeholder="One ingredient per line"></textarea>
-        </label>
-        <p class="soft">Locked with the same encryption as your main recipe — no person can read it.</p>
-        <div class="status" id="product3-status"></div>
-        <button type="button" class="tertiary-link" id="remove-seasonal-btn">Remove this product</button>
-      </div>
-
-      <button type="button" class="btn-primary" id="products-continue">Continue</button>
+      <button type="button" class="btn-primary" id="products-continue" disabled>We'll get it for you now.</button>
       <div class="status" id="products-status"></div>
       <button type="button" class="tertiary-link" id="product-back">Back</button>
+    </div>
+  </section>
+
+  <!-- ============ Screen 3.5: Barter demo — a manufactured, one-time "watch it happen" moment, not a real live claim (see fillBarterProgressScreen) ============ -->
+  <section class="screen" id="screen-barter-progress" hidden>
+    <div class="card">
+      <div id="barter-progress-loading">
+        <h1 id="barter-progress-loading-text">Getting it now&hellip;</h1>
+        <p class="soft">Your AI manager just reached out to nearby Barter members.</p>
+      </div>
+      <div id="barter-progress-success" hidden>
+        <h1>Done</h1>
+        <p class="barter-success-text" id="barter-progress-success-text"></p>
+        <button type="button" class="btn-primary" id="barter-progress-continue">Integrate your shop while we wait</button>
+      </div>
     </div>
   </section>
 
@@ -749,17 +699,6 @@
       return this.post('/api/save-profile', {
         stickerBinding: { sticker: sticker, itemId: itemId, itemName: itemName },
       });
-    },
-    createBarterDemo(productType) {
-      // Same shape as parseInventoryList above: this call's entire point is
-      // the response (the claim URL to open), so it does its own fetch
-      // rather than going through the fire-and-forget post() helper.
-      return fetch('/api/barter-demo-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ productType: productType }),
-      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
     },
     saveSchedule() {
       return this.post('/api/save-profile', { schedule: state.schedule });
@@ -1071,11 +1010,11 @@
 
   const $ = function (id) { return document.getElementById(id); };
 
-  const SCREENS = ['intro', 'auth', 'setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'schedule', 'done'];
+  const SCREENS = ['intro', 'auth', 'setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'barter-progress', 'schedule', 'done'];
   // Everything from Step 1 onward requires an account. A direct deep link
   // (or any other way of landing on one of these screens without having
   // gone through auth) gets bounced back to screen-auth — see render().
-  const POST_AUTH_SCREENS = ['setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'schedule', 'done'];
+  const POST_AUTH_SCREENS = ['setup', 'package', 'manual', 'inventory', 'stickers', 'products', 'barter-progress', 'schedule', 'done'];
 
   function go(screen) {
     state.screen = screen;
@@ -1894,161 +1833,18 @@
     renderTempToggle();
   }
 
-  // Reads whatever's currently typed (not state.products.main, which isn't
-  // written until handleProductsContinue) so this works before Continue is
-  // ever clicked — "fastest time to value," not gated on finishing the form
-  // first. Opens in a new tab so onboarding itself stays put underneath,
-  // same pattern this file already uses for the Stripe payment link.
-  function handleBarterDemoTry() {
-    const btn = $('barter-demo-btn');
-    btn.disabled = true;
-    $('barter-demo-status').textContent = 'Setting up your demo…';
-    const typedType = $('product-type').value.trim();
-    const coreProduct = (state.setup && state.setup.coreProduct) || '';
-    const productType = typedType && coreProduct ? (typedType + ' ' + coreProduct) : (typedType || coreProduct);
-    API.createBarterDemo(productType)
-      .then(function (res) {
-        btn.disabled = false;
-        if (!res.ok || !res.body || !res.body.claimUrl) {
-          $('barter-demo-status').textContent = (res.body && res.body.error) || 'Could not set that up — try again.';
-          return;
-        }
-        $('barter-demo-status').textContent = '';
-        window.open(res.body.claimUrl, '_blank');
-      })
-      .catch(function () {
-        btn.disabled = false;
-        $('barter-demo-status').textContent = 'Could not reach the server — check your connection and try again.';
-      });
+  // The CTA doubles as the barter-consent action, so it stays disabled
+  // until the box is checked — no separate validation round-trip needed
+  // for a real permission decision like this one.
+  function handleBarterConsentToggle(e) {
+    $('products-continue').disabled = !e.target.checked;
   }
 
-  // ---------- Screen 3b: SECONDARY product (optional) ----------
-  // Drafts write straight into state.products.secondary (created on first
-  // touch) so a temp tap survives a reload, but completeOnboarding() only
-  // sends the slot when slotFilled() — a half-touched slot never ships.
-  function ensureSecondary() {
-    if (!state.products.secondary) state.products.secondary = emptyProductSlot();
-    return state.products.secondary;
-  }
-
-  function fillProduct2Screen() {
-    const slot = state.products.secondary || emptyProductSlot();
-    $('product2-type').value = slot.type;
-    $('product2-toppings').value = slot.toppings;
-    $('product2-extras').value = slot.extras;
-    $('product2-recipe').value = slot.recipe;
-    renderTemp2Toggle();
-  }
-
-  function renderTemp2Toggle() {
-    const temp = state.products.secondary ? state.products.secondary.temp : '';
-    $('product2-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
-      btn.classList.toggle('selected', btn.getAttribute('data-opt') === temp);
-    });
-  }
-
-  function handleTemp2Tap(e) {
-    ensureSecondary().temp = e.currentTarget.getAttribute('data-opt');
-    saveState();
-    $('product2-status').textContent = '';
-    renderTemp2Toggle();
-  }
-
-  // Reveals the card in place (no navigation) — see handleProductsContinue,
-  // which is where this slot actually gets validated and saved.
-  function handleShowSecondary() {
-    $('secondary-entry').hidden = false;
-    $('show-secondary-btn').hidden = true;
-    fillProduct2Screen();
-    $('product2-type').focus();
-  }
-
-  function handleRemoveSecondary() {
-    // Same as the old Skip button: clears any half-typed draft so a
-    // partially-filled slot can't linger and ship later by accident.
-    state.products.secondary = null;
-    saveState();
-    $('secondary-entry').hidden = true;
-    $('show-secondary-btn').hidden = false;
-    $('product2-status').textContent = '';
-  }
-
-  // ---------- Screen 3c: SEASONAL product (optional) ----------
-  // Same draft/skip pattern as the secondary screen. The extra `season`
-  // field is a fixed four-value enum (the <select>'s own options) that the
-  // server re-validates against its SEASON_VALUES allow-list — see the
-  // THREE-SLOT note above for the honest scope of what seasonal does
-  // (reasoning context only, never baseline math).
-  function ensureSeasonal() {
-    if (!state.products.seasonal) state.products.seasonal = Object.assign(emptyProductSlot(), { season: '' });
-    return state.products.seasonal;
-  }
-
-  function fillProduct3Screen() {
-    const slot = state.products.seasonal || Object.assign(emptyProductSlot(), { season: '' });
-    $('product3-type').value = slot.type;
-    $('product3-season').value = slot.season || '';
-    $('product3-toppings').value = slot.toppings;
-    $('product3-recipe').value = slot.recipe;
-    renderTemp3Toggle();
-  }
-
-  function renderTemp3Toggle() {
-    const temp = state.products.seasonal ? state.products.seasonal.temp : '';
-    $('product3-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
-      btn.classList.toggle('selected', btn.getAttribute('data-opt') === temp);
-    });
-  }
-
-  function handleTemp3Tap(e) {
-    ensureSeasonal().temp = e.currentTarget.getAttribute('data-opt');
-    saveState();
-    $('product3-status').textContent = '';
-    renderTemp3Toggle();
-  }
-
-  // Reveals the card in place — see handleProductsContinue for validation/save.
-  function handleShowSeasonal() {
-    $('seasonal-entry').hidden = false;
-    $('show-seasonal-btn').hidden = true;
-    fillProduct3Screen();
-    $('product3-type').focus();
-  }
-
-  function handleRemoveSeasonal() {
-    // Same as the old Skip button: clears any half-typed draft, same
-    // reasoning as handleRemoveSecondary.
-    state.products.seasonal = null;
-    saveState();
-    $('seasonal-entry').hidden = true;
-    $('show-seasonal-btn').hidden = false;
-    $('product3-status').textContent = '';
-  }
-
-  function fillProductsScreen() {
-    fillProductScreen();
-    if (state.products.secondary) {
-      $('secondary-entry').hidden = false;
-      $('show-secondary-btn').hidden = true;
-      fillProduct2Screen();
-    } else {
-      $('secondary-entry').hidden = true;
-      $('show-secondary-btn').hidden = false;
-    }
-    if (state.products.seasonal) {
-      $('seasonal-entry').hidden = false;
-      $('show-seasonal-btn').hidden = true;
-      fillProduct3Screen();
-    } else {
-      $('seasonal-entry').hidden = true;
-      $('show-seasonal-btn').hidden = false;
-    }
-  }
-
-  // One shared validate-and-advance for all of Screen 3 — each slot is only
-  // checked if its card is currently expanded (i.e. the owner opted in by
-  // revealing it, or it already had real saved data). Never leaves the
-  // screen until the loop of "want to add another?" is actually closed.
+  // Secondary/seasonal products are no longer collected during onboarding
+  // (founder call, 2026-07-24: "make it JUST about the core product" —
+  // the rest of the menu is a later, spare-time step) — this now only
+  // validates/saves the one core product, then hands off to the Barter
+  // demo interstitial instead of going straight to Schedule.
   function handleProductsContinue() {
     if (!state.products.main.temp) {
       $('product-status').textContent = 'Tap Hot or Cold first.';
@@ -2061,46 +1857,12 @@
       $('product-status').textContent = 'Fill in type, toppings, and recipe before continuing.';
       return;
     }
+    if (!$('barter-consent').checked) {
+      $('product-status').textContent = 'Check the box above first.';
+      return;
+    }
     $('product-status').textContent = '';
 
-    if (!$('secondary-entry').hidden) {
-      const type2 = $('product2-type').value.trim();
-      if (!type2) {
-        $('product2-status').textContent = 'Type what it is, or tap Remove this product below.';
-        return;
-      }
-      if (!(state.products.secondary && state.products.secondary.temp)) {
-        $('product2-status').textContent = 'Tap Hot or Cold first.';
-        return;
-      }
-      $('product2-status').textContent = '';
-    } else {
-      state.products.secondary = null;
-    }
-
-    if (!$('seasonal-entry').hidden) {
-      const type3 = $('product3-type').value.trim();
-      if (!type3) {
-        $('product3-status').textContent = 'Type what it is, or tap Remove this product below.';
-        return;
-      }
-      const season3 = $('product3-season').value;
-      if (['winter', 'spring', 'summer', 'fall'].indexOf(season3) === -1) {
-        $('product3-season').focus();
-        $('product3-status').textContent = 'Pick which season it sells in.';
-        return;
-      }
-      if (!(state.products.seasonal && state.products.seasonal.temp)) {
-        $('product3-status').textContent = 'Tap Hot or Cold first.';
-        return;
-      }
-      $('product3-status').textContent = '';
-    } else {
-      state.products.seasonal = null;
-    }
-
-    // All open cards passed — now actually write every field (temp was
-    // already saved live by the tap handlers above).
     state.products.main.type = mainType;
     state.products.main.toppings = mainToppings;
     state.products.main.extras = $('product-extras').value.trim();
@@ -2108,23 +1870,44 @@
     // completeOnboarding() — since 2026-07-23 (founder-directed reversal;
     // see the seam-wide PRIVACY note above). It used to be local-only.
     state.products.main.recipe = mainRecipe;
-
-    if (state.products.secondary) {
-      const slot2 = ensureSecondary();
-      slot2.type = $('product2-type').value.trim();
-      slot2.toppings = $('product2-toppings').value.trim();
-      slot2.extras = $('product2-extras').value.trim();
-      slot2.recipe = $('product2-recipe').value;
-    }
-    if (state.products.seasonal) {
-      const slot3 = ensureSeasonal();
-      slot3.type = $('product3-type').value.trim();
-      slot3.season = $('product3-season').value;
-      slot3.toppings = $('product3-toppings').value.trim();
-      slot3.recipe = $('product3-recipe').value;
-    }
     saveState();
-    go('schedule');
+    go('barter-progress');
+  }
+
+  // ---------- Screen 3.5: Barter demo interstitial ----------
+  // MANUFACTURED, ON PURPOSE (founder, 2026-07-24: "it's going to be
+  // manufactured... just to show the demo, this is a demo"). Unlike
+  // api/barter-demo-order.js (still real, still available, just not called
+  // from this screen anymore), nothing here touches the server: no real
+  // Barter member exists yet to actually claim anything, so this stages the
+  // whole "someone's already bringing it" narrative client-side, using the
+  // owner's own just-entered core product name for the parts that ARE
+  // real. STAPLE_INGREDIENTS/DEMO_NAMES are placeholders, never the
+  // owner's actual (still-encrypted) recipe text.
+  const STAPLE_INGREDIENTS = ['flour', 'sugar', 'eggs', 'brown sugar', 'butter', 'milk'];
+  const DEMO_BARTER_NAMES = ['Jordan', 'Casey', 'Sam', 'Alex', 'Morgan'];
+  const BARTER_DEMO_DELAY_MS = 2600;
+
+  function fillBarterProgressScreen() {
+    $('barter-progress-success').hidden = true;
+    $('barter-progress-loading').hidden = false;
+
+    const typedType = $('product-type').value.trim();
+    const coreProduct = (state.setup && state.setup.coreProduct) || 'treat';
+    const productLabel = (typedType ? typedType + ' ' + coreProduct : coreProduct).trim();
+    const ingredient = STAPLE_INGREDIENTS[Math.floor(Math.random() * STAPLE_INGREDIENTS.length)];
+    const name = DEMO_BARTER_NAMES[Math.floor(Math.random() * DEMO_BARTER_NAMES.length)];
+
+    $('barter-progress-loading-text').textContent = 'Getting your ' + ingredient + ' now…';
+    $('barter-progress-success-text').textContent =
+      name + ', a Barter member already coming by, is bringing your ' + ingredient +
+      ' — you saved about $17 in delivery and service fees by trading a free ' + productLabel + ' instead.';
+
+    clearTimeout(fillBarterProgressScreen._timer);
+    fillBarterProgressScreen._timer = setTimeout(function () {
+      $('barter-progress-loading').hidden = true;
+      $('barter-progress-success').hidden = false;
+    }, BARTER_DEMO_DELAY_MS);
   }
 
   // ---------- Screen 4: schedule ----------
@@ -2250,7 +2033,8 @@
     if (state.screen === 'package') fillPackageScreen();
     if (state.screen === 'inventory') renderInventoryRows();
     if (state.screen === 'stickers') renderStickerScreen();
-    if (state.screen === 'products') fillProductsScreen();
+    if (state.screen === 'products') fillProductScreen();
+    if (state.screen === 'barter-progress') fillBarterProgressScreen();
     if (state.screen === 'schedule') renderScheduleScreen();
     if (state.screen === 'done') fillDoneScreen();
   }
@@ -2394,19 +2178,11 @@
     $('product-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
       btn.addEventListener('click', handleTempTap);
     });
-    $('barter-demo-btn').addEventListener('click', handleBarterDemoTry);
-    $('show-secondary-btn').addEventListener('click', handleShowSecondary);
-    $('product2-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
-      btn.addEventListener('click', handleTemp2Tap);
-    });
-    $('remove-secondary-btn').addEventListener('click', handleRemoveSecondary);
-    $('show-seasonal-btn').addEventListener('click', handleShowSeasonal);
-    $('product3-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
-      btn.addEventListener('click', handleTemp3Tap);
-    });
-    $('remove-seasonal-btn').addEventListener('click', handleRemoveSeasonal);
+    $('barter-consent').addEventListener('change', handleBarterConsentToggle);
     $('products-continue').addEventListener('click', handleProductsContinue);
     $('product-back').addEventListener('click', function () { go('stickers'); });
+
+    $('barter-progress-continue').addEventListener('click', function () { go('schedule'); });
 
     $('schedule-continue').addEventListener('click', handleScheduleContinue);
     $('schedule-back').addEventListener('click', function () { go('products'); });
