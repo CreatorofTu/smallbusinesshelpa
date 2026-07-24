@@ -125,6 +125,18 @@
   }
   button:hover { border-color: var(--ink); }
   button:disabled { opacity: .5; cursor: default; }
+  /* One filled/primary button style, applied only to the single forward
+     CTA on a screen (Continue/Submit/Scan/etc.) — never to genuine
+     either/or choices (vision, tier, day open/closed), which stay
+     equal-weight outline on purpose, same anti-dark-pattern instinct as
+     the Stop/Redirect pair elsewhere in this app. A fill is flatter than
+     an outline, not a reintroduced frame. */
+  .btn-primary {
+    background: var(--ink); color: var(--bg); border-color: var(--ink);
+    align-self: stretch; width: 100%;
+  }
+  .btn-primary:hover { opacity: .9; border-color: var(--ink); }
+  .btn-primary:disabled { opacity: .5; }
 
   .status {
     font-size: .9rem;
@@ -152,7 +164,7 @@
     min-height: 44px; /* full tap target, same convention as this app's other controls */
   }
   .ob-checkbox-row input[type="checkbox"] { width: 20px; height: 20px; flex: none; margin: 0; }
-  input, textarea {
+  input, textarea, select {
     font-size: 16px;
     padding: .55em .65em;
     border-radius: 8px;
@@ -163,7 +175,7 @@
     width: 100%;
   }
   textarea { resize: vertical; min-height: 5.5em; line-height: 1.45; }
-  input:focus-visible, textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
   input:disabled { opacity: .45; }
 
   .ob-progress { font-size: .8rem; color: var(--ink-soft); }
@@ -253,16 +265,17 @@
   }
 
   .day-card {
-    border: 1px solid var(--line); border-radius: 10px; padding: .8rem .9rem;
+    padding: .9rem 0; border-bottom: 1px solid var(--line);
     display: flex; flex-direction: column; gap: .6rem;
   }
+  .day-list .day-card:last-child { border-bottom: none; }
   .day-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
   .day-name { font-weight: 700; font-size: 1rem; }
   .day-toggle { display: flex; gap: .4rem; }
   .day-toggle .ob-toggle-opt { font-size: .9rem; padding: .55rem .9rem; flex: none; }
   .day-times { display: flex; gap: .6rem; align-items: center; }
   .day-times label { flex: 1; }
-  .day-list { display: flex; flex-direction: column; gap: .7rem; }
+  .day-list { display: flex; flex-direction: column; gap: 0; }
 </style>
 </head>
 <body>
@@ -278,7 +291,7 @@
       <h1>What we are</h1>
       <p>We are a startup. Our mission is to give small businesses the opportunity to grow faster using ai power.</p>
       <p class="soft">Three steps, and your physical setup arrives within 24 hours of signup.</p>
-      <button type="button" id="intro-start">Get started</button>
+      <button type="button" class="btn-primary" id="intro-start">Get started</button>
     </div>
 
     <div class="card">
@@ -301,12 +314,12 @@
         <label>Password
           <input type="password" id="auth-password" autocomplete="new-password" minlength="6" required>
         </label>
+        <button type="button" class="tertiary-link" id="auth-toggle-visibility">Show password</button>
         <p class="soft" id="auth-password-strength" hidden></p>
-        <button type="submit" id="auth-submit">Create account</button>
+        <button type="submit" class="btn-primary" id="auth-submit">Create account</button>
+        <div class="status" id="auth-status"></div>
       </form>
       <p class="soft" id="auth-legal-note">By creating an account, you agree to our <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
-      <div class="status" id="auth-status"></div>
-      <button type="button" class="tertiary-link" id="auth-toggle-visibility">Show password</button>
       <button type="button" class="tertiary-link" id="auth-mode-toggle">Already started? Log in instead</button>
       <button type="button" class="tertiary-link" id="auth-back">Back</button>
     </div>
@@ -327,13 +340,13 @@
         </label>
         <label>Address of the place of operation (restaurant, cafe)
           <input type="text" id="setup-address" autocomplete="street-address" required>
-          <span class="soft">Our product will not work anywhere else.</span>
+          <span class="soft">This is where your kit ships and where the ai works — it's tied to this one location.</span>
         </label>
         <label>Core product sold
-          <input type="text" id="setup-product" placeholder="Chicken" required>
-          <span class="soft">Example: what would a customer say when describing you? "The chicken restaurant." Even though you sell other things, you probably sell chicken at your core.</span>
+          <input type="text" id="setup-product" placeholder="Waffles" required>
+          <span class="soft">Example: what would a customer say when describing you? "The waffle place." Even though you sell other things, you probably sell waffles at your core.</span>
         </label>
-        <button type="submit" id="setup-pay">Continue</button>
+        <button type="submit" class="btn-primary" id="setup-pay">Continue</button>
       </form>
 
       <div id="setup-vision-block" hidden>
@@ -377,8 +390,7 @@
       </label>
       <div class="status" id="package-status"></div>
       <p class="soft">If you turn on notifications, we'll remind you around when it's due — no need to keep checking.</p>
-      <p class="soft">Coming soon: hear this feedback back instead of reading it — in your own voice.</p>
-      <button type="button" id="package-received-cta">I've received my package</button>
+      <button type="button" class="btn-primary" id="package-received-cta">I've received my package</button>
       <button type="button" class="tertiary-link" id="package-back">Back</button>
     </div>
   </section>
@@ -396,7 +408,7 @@
         <li>Once done placing stickers, take your phone and scan every sticker, then tap the name of the item. The count will decrease as you go (3 tables mentioned, 2 tables left, 1 table left as you scan then assign).</li>
       </ol>
       <p class="soft">Tip: every sticker has its number printed on it — typing the number in this app works just as well as scanning.</p>
-      <button type="button" id="package-continue">Start the walk-around list</button>
+      <button type="button" class="btn-primary" id="package-continue">Start the walk-around list</button>
       <button type="button" class="tertiary-link" id="manual-back">Back</button>
     </div>
   </section>
@@ -441,7 +453,7 @@
       <p class="soft">Put a sticker on each item, type the sticker's number below, then tap the item's name. (Scanning the sticker's QR code works too.)</p>
       <p class="soft">No stickers yet? They arrive within 24 hours — this screen will be waiting right here when they do.</p>
       <div class="sticker-banner" id="sticker-banner"></div>
-      <button type="button" id="sticker-scan-open">Scan with camera</button>
+      <button type="button" class="btn-primary" id="sticker-scan-open">Scan with camera</button>
       <div class="sticker-scanner" id="sticker-scanner" hidden>
         <video id="sticker-scanner-video" autoplay playsinline muted></video>
         <canvas id="sticker-scanner-canvas" hidden></canvas>
@@ -481,10 +493,11 @@
         <label>4. Any other significant items that could've been here? Matcha tea? (Optional)
           <input type="text" id="product-extras">
         </label>
-        <label>5. The most important part: define the recipe, ingredients only right now. Every recipe you save here — this one, and a secondary or seasonal product's if you add one on the next screens — is saved to your account so your ai can catch it when a recipe change moves your numbers, and each one is locked with encryption before it's stored, so no person can read it. Not us, not staff, nobody. It's only ever unlocked for a moment, by the system, to work on your own reads — never shown to anyone, never shared, never sold. We assume you have best food practices, so we won't ask anything else past that.
+        <label>5. The most important part — your recipe. Ingredients only, one per line.
           <textarea id="product-recipe" placeholder="One ingredient per line" required></textarea>
         </label>
-        <button type="submit">Continue</button>
+        <p class="soft">Your recipe is locked with encryption the moment it's saved — no person can read it. Not us, not staff, nobody. The system only unlocks it for a moment to catch when a recipe change moves your numbers. Never shown to anyone, never shared, never sold.</p>
+        <button type="submit" class="btn-primary">Continue</button>
       </form>
       <div class="status" id="product-status"></div>
       <button type="button" class="tertiary-link" id="product-back">Back</button>
@@ -513,10 +526,11 @@
         <label>4. Any other significant items that could've been here instead? (Optional)
           <input type="text" id="product2-extras">
         </label>
-        <label>5. Its recipe, ingredients only. (Optional) Locked with the same encryption as your main recipe before it's stored — no person can read it, it's only ever unlocked for a moment, by the system, to work on your own reads.
+        <label>5. Its recipe, ingredients only. (Optional)
           <textarea id="product2-recipe" placeholder="One ingredient per line"></textarea>
         </label>
-        <button type="submit">Save and continue</button>
+        <p class="soft">Locked with the same encryption as your main recipe — no person can read it.</p>
+        <button type="submit" class="btn-primary">Save and continue</button>
       </form>
       <div class="status" id="product2-status"></div>
       <button type="button" class="tertiary-link" id="product2-skip">Skip — no secondary product</button>
@@ -530,11 +544,12 @@
       <div class="ob-progress">Step 3 of 3</div>
       <h1>Any seasonal product?</h1>
       <p class="soft">Something that's popular during one part of the year — a summer drink, a holiday special. Optional — skip it if there isn't one.</p>
+      <p class="soft">This is context for your ai, not a change to your numbers: your daily total stays one combined number, so nothing here adjusts any baseline math. It just lets the ai connect a seasonal swing to the season starting or ending, instead of flagging it as unexplained.</p>
       <form id="product3-form">
         <label>1. What is it?
           <input type="text" id="product3-type" placeholder="A summer lemonade? A holiday special?">
         </label>
-        <label>2. Which season does it sell in?
+        <label>Which season does it sell in?
           <select id="product3-season">
             <option value="">Pick a season</option>
             <option value="winter">Winter (Dec&ndash;Feb)</option>
@@ -543,20 +558,20 @@
             <option value="fall">Fall (Sep&ndash;Nov)</option>
           </select>
         </label>
-        <div class="field-label">3. Is it served hot or cold?
+        <div class="field-label">2. Is it served hot or cold?
           <div class="ob-toggle" id="product3-temp">
             <button type="button" class="ob-toggle-opt" data-opt="Hot">Hot</button>
             <button type="button" class="ob-toggle-opt" data-opt="Cold">Cold</button>
           </div>
         </div>
-        <label>4. What toppings/sides usually come with it? (Optional)
+        <label>3. What toppings/sides usually come with it? (Optional)
           <input type="text" id="product3-toppings">
         </label>
-        <label>5. Its recipe, ingredients only. (Optional) Locked with the same encryption as your main recipe before it's stored — no person can read it, it's only ever unlocked for a moment, by the system, to work on your own reads.
+        <label>4. Its recipe, ingredients only. (Optional)
           <textarea id="product3-recipe" placeholder="One ingredient per line"></textarea>
         </label>
-        <p class="soft">Honest note on what this does: your daily numbers are one combined total — we don't track each product's own sales — so this never changes or adjusts any baseline math. It gives your ai context: when a swing in your numbers lines up with this season starting or ending, it can weigh that as a likely seasonal explanation instead of an unexplained change.</p>
-        <button type="submit">Save and continue</button>
+        <p class="soft">Locked with the same encryption as your main recipe — no person can read it.</p>
+        <button type="submit" class="btn-primary">Save and continue</button>
       </form>
       <div class="status" id="product3-status"></div>
       <button type="button" class="tertiary-link" id="product3-skip">Skip — no seasonal product</button>
@@ -572,7 +587,7 @@
       <p>What is your schedule across a 7 day week?</p>
       <p class="soft">Select open days, closed days, and start and close times. Outside these hours, the ai stickers won't be available.</p>
       <div class="day-list" id="day-list"></div>
-      <button type="button" id="schedule-continue">Finish setup</button>
+      <button type="button" class="btn-primary" id="schedule-continue">Finish setup</button>
       <div class="status" id="schedule-status"></div>
       <button type="button" class="tertiary-link" id="schedule-back">Back</button>
     </div>
@@ -585,7 +600,7 @@
       <p>Our ai will learn your restaurant and return in exactly one week from now. Now all you have to do is bring in as many customers as you can, to develop your baseline for how your business performs in a 7 day week.</p>
       <p class="soft" id="done-sticker-reminder" hidden>Some items on your list don't have stickers yet. When your stickers arrive, open this page and finish placing them.</p>
       <div class="status" id="done-status"></div>
-      <button type="button" id="done-open-app">Open your app</button>
+      <button type="button" class="btn-primary" id="done-open-app">Open your app</button>
       <button type="button" class="tertiary-link" id="done-back">Back</button>
     </div>
   </section>
@@ -944,8 +959,16 @@
         secondary: null,
         seasonal: null,
       },
-      schedule: DAYS.map(function (day) {
-        return { day: day, open: true, start: '09:00', end: '17:00' };
+      // customized: false on every day except the first (Monday, the
+      // auto-populate source) means "still following Monday's hours" —
+      // editing Monday propagates to every day that hasn't been
+      // individually touched yet. Editing any other day directly detaches
+      // just that one day (customized: true) so it stops following Monday
+      // and keeps its own value from then on. Hours don't usually change
+      // day to day for a small business — this cuts the common case (same
+      // hours every day) down to filling in one day instead of seven.
+      schedule: DAYS.map(function (day, i) {
+        return { day: day, open: true, start: '09:00', end: '17:00', customized: i === 0 };
       }),
       done: false,
     };
@@ -964,6 +987,12 @@
       }
       if (!Array.isArray(base.inventory) || base.inventory.length === 0) base.inventory = [newInventoryRow()];
       if (!Array.isArray(base.schedule) || base.schedule.length !== 7) base.schedule = defaultState().schedule;
+      // Pre-auto-populate saved schedules predate the `customized` field —
+      // treat every already-saved day as customized (never auto-overwrite
+      // real hours an owner already set before this feature existed).
+      base.schedule.forEach(function (row, i) {
+        if (row && typeof row.customized !== 'boolean') row.customized = true;
+      });
       // Migrate pre-3-slot saved state: the old shape stored a single
       // state.product — it becomes products.main unchanged (the base merge
       // loop above drops unknown keys, so without this an in-progress
@@ -2010,7 +2039,22 @@
     $('day-list').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         const i = Number(e.currentTarget.getAttribute('data-i'));
-        state.schedule[i].open = e.currentTarget.getAttribute('data-open') === '1';
+        const nowOpen = e.currentTarget.getAttribute('data-open') === '1';
+        if (i === 0) {
+          // Monday is the auto-populate source — always take its own new
+          // value (idx === 0), and also propagate to every day that hasn't
+          // been individually edited yet (see the `customized` note on
+          // defaultState()'s schedule). Monday's own row keeps
+          // customized:true as "this is the source," which would otherwise
+          // make this same loop skip writing Monday's own edit back into
+          // state — idx === 0 guards against that.
+          state.schedule.forEach(function (row, idx) {
+            if (idx === 0 || !row.customized) row.open = nowOpen;
+          });
+        } else {
+          state.schedule[i].open = nowOpen;
+          state.schedule[i].customized = true; // detach — stop following Monday
+        }
         saveState();
         renderScheduleScreen();
       });
@@ -2019,8 +2063,27 @@
       input.addEventListener('input', function (e) {
         const i = Number(e.target.getAttribute('data-i'));
         const kind = e.target.getAttribute('data-kind');
-        state.schedule[i][kind] = e.target.value;
-        saveState();
+        const value = e.target.value;
+        if (i === 0) {
+          // Same idx === 0 guard as the open/closed toggle above — without
+          // it, Monday's own customized:true (its "I'm the source" marker)
+          // would make this loop skip saving Monday's own new value.
+          state.schedule.forEach(function (row, idx) {
+            if (idx === 0 || !row.customized) row[kind] = value;
+          });
+          saveState();
+          // Live-update the other now-prefilled time inputs without a full
+          // re-render (which would steal focus from whatever the owner is
+          // still typing in).
+          $('day-list').querySelectorAll('input[data-kind="' + kind + '"]').forEach(function (otherInput) {
+            const otherI = Number(otherInput.getAttribute('data-i'));
+            if (otherI !== 0 && !state.schedule[otherI].customized) otherInput.value = value;
+          });
+        } else {
+          state.schedule[i][kind] = value;
+          state.schedule[i].customized = true; // detach — stop following Monday
+          saveState();
+        }
       });
     });
   }
