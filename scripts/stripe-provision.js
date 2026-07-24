@@ -20,7 +20,7 @@
 //      subscription checkout automatically — no mode flag exists or is
 //      needed on Payment Links).
 //   4. A webhook endpoint at
-//      https://smallbusinesshelpa.vercel.app/api/stripe-webhook
+//      https://www.foundwithherald.com/api/stripe-webhook
 //      listening for checkout.session.completed and
 //      customer.subscription.deleted — the two events api/stripe-webhook.js
 //      actually handles.
@@ -56,7 +56,7 @@
 
 'use strict';
 
-const WEBHOOK_URL = 'https://smallbusinesshelpa.vercel.app/api/stripe-webhook';
+const WEBHOOK_URL = 'https://www.foundwithherald.com/api/stripe-webhook';
 
 // These two lookup_keys are the stable contract between this script,
 // api/stripe-webhook.js (reads them off the subscription's Price to infer
