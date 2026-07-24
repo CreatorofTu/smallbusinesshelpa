@@ -276,6 +276,13 @@
   .econ-row-values { font-size: .9rem; color: var(--ink-soft); margin: .15rem 0 0; }
   .econ-form { margin-top: .6rem; }
 
+  /* Barter Shopper savings calculator — reuses the econ-row-label grammar
+     above; .barter-calc-savings is the one deliberate green in this file,
+     same "good news" convention already used elsewhere for savings/success
+     figures. */
+  .barter-calc-result { border-top: 1px solid var(--line); padding-top: .7rem; margin-top: .9rem; display: flex; flex-direction: column; gap: .3rem; }
+  .barter-calc-savings { color: #1a7f37; }
+
   /* Ask-your-AI-manager (confirm-then-delay) — see the section's HTML
      comment. The Stop/Redirect escape hatches are DELIBERATELY identical:
      same element, same class, same size, side by side at equal flex width.
@@ -465,6 +472,31 @@
       <div id="econ-rows"></div>
     </div>
 
+    <!-- Barter Shopper savings calculator — a rough, illustrative estimate
+         (not a live fee lookup) showing why a reimbursed Barter Shopper run
+         beats routing a single small item through a delivery app's normal
+         consumer flow. $13 flat overhead = $6 delivery + $3 service + $2
+         small-order fee + $2 tip; 0.15 = the app's typical markup over
+         retail on the item itself. Reward cost defaults to the main
+         product's logged costPerUnit (Product costs & margins above) when
+         it exists, editable either way — see calculateBarterSavings(). -->
+    <button class="tertiary-link" id="barter-calc-btn" type="button">Barter Shopper savings calculator</button>
+    <div class="summary-block" id="barter-calc-block" hidden>
+      <p class="summary-label">Barter Shopper savings calculator</p>
+      <p class="soft">A rough estimate, not a live receipt lookup — but the gap is real: a delivery app charges its own markup plus a flat stack of fees no matter how cheap the item is.</p>
+      <label>What does the item cost at the store?
+        <input type="number" id="barter-calc-item-cost" inputmode="decimal" min="0" step="0.01" placeholder="e.g. 3.65">
+      </label>
+      <label>Cost of the reward you're giving (ingredients only)
+        <input type="number" id="barter-calc-reward-cost" inputmode="decimal" min="0" step="0.01" placeholder="e.g. 0.85">
+      </label>
+      <div class="barter-calc-result" id="barter-calc-result" hidden>
+        <p class="econ-row-label">If delivered: <span id="barter-calc-delivered"></span></p>
+        <p class="econ-row-label">Barter Shopper: <span id="barter-calc-actual"></span></p>
+        <p class="econ-row-label barter-calc-savings">You'd save: <span id="barter-calc-savings"></span></p>
+      </div>
+    </div>
+
     <!-- Ask your AI manager — the confirm-then-delay consent mechanic
          (PRODUCT-CONTEXT.md, "Trust, consent, and the baseline mechanic"),
          now a real flow against /api/task-request. The owner says what they
@@ -616,6 +648,14 @@
     econBlock: document.getElementById('econ-block'),
     econStatus: document.getElementById('econ-status'),
     econRows: document.getElementById('econ-rows'),
+    barterCalcBtn: document.getElementById('barter-calc-btn'),
+    barterCalcBlock: document.getElementById('barter-calc-block'),
+    barterCalcItemCost: document.getElementById('barter-calc-item-cost'),
+    barterCalcRewardCost: document.getElementById('barter-calc-reward-cost'),
+    barterCalcResult: document.getElementById('barter-calc-result'),
+    barterCalcDelivered: document.getElementById('barter-calc-delivered'),
+    barterCalcActual: document.getElementById('barter-calc-actual'),
+    barterCalcSavings: document.getElementById('barter-calc-savings'),
     taskBtn: document.getElementById('task-btn'),
     taskBlock: document.getElementById('task-block'),
     taskForm: document.getElementById('task-form'),
@@ -1390,6 +1430,7 @@
   // owner's own typed text and must never be interpreted as markup). Same
   // once-per-load-until-toggled pattern as loadHistory().
   let econLoaded = false;
+  let lastEconSlots = null; // most recent GET's data.slots — read by the Barter Shopper calculator below to default its reward-cost field
 
   const ECON_SLOT_ORDER = ['main', 'secondary', 'seasonal'];
   const ECON_SLOT_WORD = { main: 'main product', secondary: 'secondary product', seasonal: 'seasonal product' };
@@ -1418,8 +1459,9 @@
       }
       const data = await res.json();
       econLoaded = true;
+      lastEconSlots = data && data.slots ? data.slots : {};
       els.econStatus.textContent = '';
-      renderEconRows(data && data.slots ? data.slots : {});
+      renderEconRows(lastEconSlots);
     } catch (err) {
       els.econStatus.textContent = isTimeoutError(err)
         ? 'Taking longer than expected — try again in a bit.'
@@ -1432,6 +1474,43 @@
     // its ingredient cost is exactly what this section exists to reveal) —
     // just formatted as -$1.50 rather than $-1.50.
     return n < 0 ? '-$' + Math.abs(n).toFixed(2) : '$' + n.toFixed(2);
+  }
+
+  // ---- Barter Shopper savings calculator ----
+  // Same rough-estimate math as the onboarding demo screen's "$17 vs
+  // $4.50" comparison (see PRODUCT-CONTEXT.md's Barter Shopper spec):
+  // $13 flat overhead ($6 delivery + $3 service + $2 small-order fee + $2
+  // tip) exists no matter what the item costs, plus a 0.15 markup delivery
+  // apps typically add over retail. Barter Shopper cost is just the real
+  // reimbursed item price plus whatever the reward actually costs in
+  // ingredients — no markup, no delivery-app fee stack.
+  const BARTER_CALC_FLAT_FEES = 13;
+  const BARTER_CALC_MARKUP = 0.15;
+  function calculateBarterSavings() {
+    const itemCost = parseFloat(els.barterCalcItemCost.value);
+    const rewardCost = parseFloat(els.barterCalcRewardCost.value);
+    if (!Number.isFinite(itemCost) || itemCost < 0 || !Number.isFinite(rewardCost) || rewardCost < 0) {
+      els.barterCalcResult.hidden = true;
+      return;
+    }
+    const delivered = itemCost * (1 + BARTER_CALC_MARKUP) + BARTER_CALC_FLAT_FEES;
+    const actual = itemCost + rewardCost;
+    const savings = delivered - actual;
+    els.barterCalcDelivered.textContent = formatDollars(delivered);
+    els.barterCalcActual.textContent = formatDollars(actual);
+    els.barterCalcSavings.textContent = formatDollars(savings);
+    els.barterCalcResult.hidden = false;
+  }
+  function handleBarterCalcToggle() {
+    const opening = els.barterCalcBlock.hidden;
+    els.barterCalcBlock.hidden = !opening;
+    // Default the reward-cost field from the main product's already-logged
+    // costPerUnit (Product costs & margins above), if it's been loaded and
+    // exists — never overwrites something the owner already typed in.
+    if (opening && !els.barterCalcRewardCost.value && econLoaded && lastEconSlots && lastEconSlots.main &&
+        lastEconSlots.main.costPerUnit !== null && lastEconSlots.main.costPerUnit !== undefined) {
+      els.barterCalcRewardCost.value = lastEconSlots.main.costPerUnit.toFixed(2);
+    }
   }
 
   function econSummaryText(slotData) {
@@ -1990,6 +2069,9 @@
     els.qrStickersBtn.addEventListener('click', function () { location.href = '/qr-stickers.html'; });
     els.historyBtn.addEventListener('click', handleHistoryToggle);
     els.econBtn.addEventListener('click', handleEconToggle);
+    els.barterCalcBtn.addEventListener('click', handleBarterCalcToggle);
+    els.barterCalcItemCost.addEventListener('input', calculateBarterSavings);
+    els.barterCalcRewardCost.addEventListener('input', calculateBarterSavings);
     els.chromeInstallBtn.addEventListener('click', handleChromeInstall);
     els.enableBtn.addEventListener('click', handleEnable);
     els.readBtn.addEventListener('click', handleGetRead);
