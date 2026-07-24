@@ -26,7 +26,7 @@ module.exports = async function handler(req, res) {
 
   const { title, body, url } = req.body || {};
   const payload = JSON.stringify({
-    title: title || 'Justaddegg',
+    title: title || 'Herald',
     body: body || 'Something changed — take a look.',
     url: url || '/',
   });

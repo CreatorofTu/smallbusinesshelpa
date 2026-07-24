@@ -28,7 +28,7 @@ const { kv } = require('@vercel/kv');
 // Stripe carries that value through checkout untouched and hands it back
 // on the resulting checkout.session.completed event as
 // session.client_reference_id. That is the ONLY thread connecting a Stripe
-// payment to a Justaddegg account — if onboarding.html ever stops appending
+// payment to a Herald account — if onboarding.html ever stops appending
 // it, payments still succeed but land here with no account to attach to
 // (logged and skipped below, never guessed).
 //

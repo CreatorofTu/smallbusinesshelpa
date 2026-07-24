@@ -6,7 +6,7 @@ const { kv } = require('@vercel/kv');
 // prototype (PRODUCT-CONTEXT.md's distribution-partnership section). Unlike
 // api/subscribe.js (which attaches a push subscription to a logged-in
 // business account), this one has no account at all — the whole point of
-// Barter is reaching random nearby people who will never create a Justaddegg
+// Barter is reaching random nearby people who will never create a Herald
 // account, just opt into "want a shot at free stuff sometimes?" alerts.
 //
 // Anonymous subscriber id (crypto.randomUUID(), server-assigned) rather than

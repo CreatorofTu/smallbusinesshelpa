@@ -88,7 +88,7 @@ module.exports = async function handler(req, res) {
     }
 
     const payload = JSON.stringify({
-      title: 'Justaddegg',
+      title: 'Herald',
       body: 'This is a real push, sent from a real server, to this exact device.',
       url: '/',
     });

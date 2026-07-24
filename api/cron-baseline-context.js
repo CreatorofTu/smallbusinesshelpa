@@ -86,7 +86,7 @@ module.exports = async function handler(req, res) {
   const results = { checked: accountIds.length, pushed: 0, skipped: 0, removedStaleSub: 0, failed: 0 };
 
   const payload = JSON.stringify({
-    title: 'Justaddegg',
+    title: 'Herald',
     body: 'Building your baseline — tell your AI more about your business',
     url: '/index.html?context=1',
   });

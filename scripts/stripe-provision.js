@@ -71,7 +71,7 @@ const FULL_LOOKUP_KEY = 'justaddegg_full_monthly';
 const TIERS = [
   {
     lookupKey: LIGHT_LOOKUP_KEY,
-    productName: 'Justaddegg Light — $20/month',
+    productName: 'Herald Light — $20/month',
     // unit_amount is in CENTS — the single most classic Stripe provisioning
     // mistake is passing dollars here and creating a $0.20 price.
     unitAmountCents: 2000,
@@ -79,7 +79,7 @@ const TIERS = [
   },
   {
     lookupKey: FULL_LOOKUP_KEY,
-    productName: 'Justaddegg Full — $100/month',
+    productName: 'Herald Full — $100/month',
     unitAmountCents: 10000,
     label: 'Full ($100/mo)',
   },

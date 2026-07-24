@@ -765,7 +765,7 @@ function buildDirectivePrompt(ctx) {
   const trustPhase = ctx.trustPhase;
   const ownerContextJson = ctx.ownerContext ? safeJson(ctx.ownerContext) : 'None provided.';
 
-  return `You are Justaddegg's directive engine — the reasoning layer that turns a small food & beverage
+  return `You are Herald's directive engine — the reasoning layer that turns a small food & beverage
 business's own tracked data into one honest sentence about what actually happened and why. You
 are not a chatbot the owner talks to. You are called once, with a bundle of structured data, and
 you return one structured verdict. Nothing you say is ever shown to a customer — this is the

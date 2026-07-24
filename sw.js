@@ -9,7 +9,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let payload = { title: 'Justaddegg', body: 'Something changed — take a look.' };
+  let payload = { title: 'Herald', body: 'Something changed — take a look.' };
   if (event.data) {
     let parsed = null;
     try {

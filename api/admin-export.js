@@ -274,7 +274,7 @@ module.exports = async function handler(req, res) {
     // keyCount above is computed just before _meta is attached, so it never
     // counts itself.
 
-    const filename = `justaddegg-backup-${todayUTC()}.json`;
+    const filename = `herald-backup-${todayUTC()}.json`;
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

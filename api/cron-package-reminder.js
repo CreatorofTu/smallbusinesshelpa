@@ -56,7 +56,7 @@ module.exports = async function handler(req, res) {
   const results = { checked: accountIds.length, sent: 0, skipped: 0, removedStaleSub: 0, failed: 0 };
 
   const payload = JSON.stringify({
-    title: 'Justaddegg',
+    title: 'Herald',
     body: 'Your sticker kit should have arrived by now — open the app to confirm and keep setting up.',
     url: '/onboarding.html',
   });

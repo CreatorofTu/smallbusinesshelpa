@@ -147,7 +147,7 @@ module.exports = async function handler(req, res) {
         if (!bodyText) { results.skipped += 1; return; }
 
         const payload = JSON.stringify({
-          title: 'Justaddegg',
+          title: 'Herald',
           body: truncateForPush(bodyText),
           // Deep-links to index.html's full-screen reveal (a plain white
           // screen with the real directive sentence in black text) instead
