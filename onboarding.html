@@ -249,6 +249,10 @@
   .product-entry.product-main { padding-top: 0; border-top: none; }
   .core-badge { font-weight: 700; font-size: .95rem; margin: 0; }
   .product-add-row { display: flex; flex-direction: column; gap: .6rem; }
+  .barter-demo-row {
+    display: flex; flex-direction: column; gap: .5rem;
+    padding-top: 1rem; border-top: 1px solid var(--line);
+  }
 
   .sticker-banner {
     padding: .25rem 0;
@@ -513,6 +517,12 @@
         <div class="status" id="product-status"></div>
       </div>
 
+      <div class="barter-demo-row">
+        <p class="soft">Your AI manager can bring customers in the door itself, too.</p>
+        <button type="button" class="inv-add" id="barter-demo-btn">Give it a try — see what your customers would see</button>
+        <div class="status" id="barter-demo-status"></div>
+      </div>
+
       <div class="product-add-row">
         <button type="button" class="inv-add" id="show-secondary-btn">+ Add a secondary product — usually sold alongside it</button>
         <button type="button" class="inv-add" id="show-seasonal-btn">+ Add a seasonal product — only part of the year</button>
@@ -739,6 +749,17 @@
       return this.post('/api/save-profile', {
         stickerBinding: { sticker: sticker, itemId: itemId, itemName: itemName },
       });
+    },
+    createBarterDemo(productType) {
+      // Same shape as parseInventoryList above: this call's entire point is
+      // the response (the claim URL to open), so it does its own fetch
+      // rather than going through the fire-and-forget post() helper.
+      return fetch('/api/barter-demo-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ productType: productType }),
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
     },
     saveSchedule() {
       return this.post('/api/save-profile', { schedule: state.schedule });
@@ -1873,6 +1894,34 @@
     renderTempToggle();
   }
 
+  // Reads whatever's currently typed (not state.products.main, which isn't
+  // written until handleProductsContinue) so this works before Continue is
+  // ever clicked — "fastest time to value," not gated on finishing the form
+  // first. Opens in a new tab so onboarding itself stays put underneath,
+  // same pattern this file already uses for the Stripe payment link.
+  function handleBarterDemoTry() {
+    const btn = $('barter-demo-btn');
+    btn.disabled = true;
+    $('barter-demo-status').textContent = 'Setting up your demo…';
+    const typedType = $('product-type').value.trim();
+    const coreProduct = (state.setup && state.setup.coreProduct) || '';
+    const productType = typedType && coreProduct ? (typedType + ' ' + coreProduct) : (typedType || coreProduct);
+    API.createBarterDemo(productType)
+      .then(function (res) {
+        btn.disabled = false;
+        if (!res.ok || !res.body || !res.body.claimUrl) {
+          $('barter-demo-status').textContent = (res.body && res.body.error) || 'Could not set that up — try again.';
+          return;
+        }
+        $('barter-demo-status').textContent = '';
+        window.open(res.body.claimUrl, '_blank');
+      })
+      .catch(function () {
+        btn.disabled = false;
+        $('barter-demo-status').textContent = 'Could not reach the server — check your connection and try again.';
+      });
+  }
+
   // ---------- Screen 3b: SECONDARY product (optional) ----------
   // Drafts write straight into state.products.secondary (created on first
   // touch) so a temp tap survives a reload, but completeOnboarding() only
@@ -2345,6 +2394,7 @@
     $('product-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
       btn.addEventListener('click', handleTempTap);
     });
+    $('barter-demo-btn').addEventListener('click', handleBarterDemoTry);
     $('show-secondary-btn').addEventListener('click', handleShowSecondary);
     $('product2-temp').querySelectorAll('.ob-toggle-opt').forEach(function (btn) {
       btn.addEventListener('click', handleTemp2Tap);
