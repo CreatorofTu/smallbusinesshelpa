@@ -582,10 +582,10 @@
           </div>
           <div class="barter-value-row">
             <p class="barter-value-label">What it actually cost you</p>
-            <p class="barter-value-big barter-value-good">$0.85</p>
+            <p class="barter-value-big barter-value-good">$4.50</p>
             <p class="soft barter-value-breakdown" id="barter-value-actual-breakdown"></p>
           </div>
-          <p class="barter-value-time"><strong>~35 min</strong> saved &mdash; no dedicated trip or delivery wait, since they were coming by anyway</p>
+          <p class="barter-value-time"><strong>~$12.50 saved</strong>, and a verified Shopper buys it now instead of a scheduled pickup order 3&ndash;4 hours out</p>
         </div>
 
         <button type="button" class="btn-primary" id="barter-progress-continue">Integrate your shop while we wait</button>
@@ -1953,10 +1953,10 @@
 
     $('barter-progress-loading-text').textContent = 'Getting your ' + ingredient + ' now…';
     $('barter-progress-success-text').textContent =
-      name + ', a Barter member already coming by, is bringing your ' + ingredient +
-      ' — you saved about $17 in delivery and service fees by trading a free ' + productLabel + ' instead.';
+      name + ', a verified Barter Shopper nearby, is buying your ' + ingredient +
+      ' at the store now — you\'ll reimburse the receipt and they get a free ' + productLabel + ' for the errand.';
     $('barter-value-actual-breakdown').textContent =
-      'Bulk ingredient cost of one free ' + productLabel;
+      '$3.65 reimbursed for the receipt + $0.85 in ingredients for their free ' + productLabel;
 
     clearTimeout(fillBarterProgressScreen._timer);
     fillBarterProgressScreen._timer = setTimeout(function () {
